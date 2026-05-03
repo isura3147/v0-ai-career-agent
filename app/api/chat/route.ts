@@ -7,10 +7,13 @@ const groq = createOpenAI({
   apiKey: process.env.groq_key || "",
 })
 
+console.log("[v0] Groq provider initialized - API key present:", !!process.env.groq_key)
+
 export const maxDuration = 30
 
 export async function POST(req: Request) {
   try {
+    console.log("[v0] POST /api/chat - Groq API key available:", !!process.env.groq_key)
     const { messages } = await req.json()
 
     const result = streamText({
