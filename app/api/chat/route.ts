@@ -1,12 +1,41 @@
 import { streamText, tool, convertToModelMessages, stepCountIs } from "ai"
 import { createCerebras } from "@ai-sdk/cerebras"
 import { z } from "zod"
+import PQueue from "p-queue"
 
 const cerebras = createCerebras({
   apiKey: process.env.CEREBRAS_API_KEY || "",
 })
 
-export const maxDuration = 30
+export const maxDuration = 60
+
+// --------------------------------------------------------------------------
+// Request queue to prevent bursts that trigger rate limits.
+// Concurrency of 1 ensures only one LLM call at a time.
+// --------------------------------------------------------------------------
+const llmQueue = new PQueue({ concurrency: 1 })
+
+// --------------------------------------------------------------------------
+// Exponential backoff helper
+// --------------------------------------------------------------------------
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
+  let delay = 1000
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn()
+    } catch (err) {
+      const isRateLimit =
+        err instanceof Error && /rate.?limit|429|too many/i.test(err.message)
+      if (i === retries - 1 || !isRateLimit) throw err
+      console.log(`[v0] Rate limited, retrying in ${delay}ms (attempt ${i + 2}/${retries})`)
+      await sleep(delay)
+      delay *= 2
+    }
+  }
+  throw new Error("Retry limit exceeded")
+}
 
 // --------------------------------------------------------------------------
 // Tavily Search helper — free tier, 1,000 searches/month, designed for AI agents
@@ -154,8 +183,11 @@ export async function POST(req: Request) {
       })
     }
 
-    const result = streamText({
-      model: cerebras("qwen-3-235b-a22b-instruct-2507"),
+    // Queue and retry the LLM call to reduce rate limit errors
+    const result = await llmQueue.add(() =>
+      withRetry(() =>
+        streamText({
+          model: cerebras("qwen-3-235b-a22b-instruct-2507"),
       system: `You are a Career Strategist AI assistant helping users find real job opportunities tailored to their background.
 
 ${
@@ -201,7 +233,13 @@ STRICT RULES:
           toolCalls?.map((t) => t.toolName),
         )
       },
-    })
+        })
+      )
+    )
+
+    if (!result) {
+      throw new Error("Failed to get response from LLM")
+    }
 
     console.log("[v0] streamText started — returning UI message stream")
     return result.toUIMessageStreamResponse()
