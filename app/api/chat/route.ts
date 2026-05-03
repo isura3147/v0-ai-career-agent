@@ -7,7 +7,6 @@ const google = createGoogleGenerativeAI({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
 })
 
-
 export const maxDuration = 60
 
 // --------------------------------------------------------------------------
@@ -131,14 +130,9 @@ export async function POST(req: Request) {
     console.log("[v0] Received", messages?.length ?? 0, "messages")
     console.log("[v0] Resume present:", !!resumeText, "length:", resumeText.length)
 
-    const alreadyBatched = hasBatchedJobs(messages)
-    console.log("[v0] already batched jobs this turn:", alreadyBatched)
-
     // Hard cap: max 3 jobs per batch (matches Tavily max_results).
     const KANBAN_LIMIT = 3
 
-    // Build tools dynamically — drop add_jobs_batch once the user already
-    // got their batch this turn so the model can't loop back into adding more.
     const toolset: Record<string, any> = {
       search_jobs: tool({
         description:
@@ -154,86 +148,78 @@ export async function POST(req: Request) {
       }),
     }
 
-    if (!alreadyBatched) {
-      const jobSchema = z.object({
-        title: z.string().describe("The job title"),
-        company: z.string().describe("The company name"),
-        link: z.string().describe("URL to the job posting"),
-        description: z
-          .string()
-          .describe(
-            "A 2-4 sentence summary of the role, key responsibilities, and required skills. Pulled from the search result content."
-          ),
-        matchPercentage: z
-          .number()
-          .describe("How well the job matches the user's skills (0-100)"),
-        missingSkills: z
-          .array(z.string())
-          .describe("Skills the user is missing for this role"),
-      })
+    const jobSchema = z.object({
+      title: z.string().describe("The job title"),
+      company: z.string().describe("The company name"),
+      link: z.string().describe("URL to the job posting"),
+      description: z
+        .string()
+        .describe(
+          "A 2-4 sentence summary of the role, key responsibilities, and required skills. Pulled from the search result content."
+        ),
+      matchPercentage: z
+        .number()
+        .describe("How well the job matches the user's skills (0-100)"),
+      missingSkills: z
+        .array(z.string())
+        .describe("Skills the user is missing for this role"),
+    })
 
-      toolset.add_jobs_batch = tool({
-        description: `Add ALL relevant job opportunities from the search results to the user's Kanban board in a SINGLE call. Pass an array of up to ${KANBAN_LIMIT} jobs. Call this tool EXACTLY ONCE — never more than once.`,
-        inputSchema: z.object({
-          jobs: z
-            .array(jobSchema)
-            .min(1)
-            .max(3)
-            .describe(`Array of up to 3 jobs to add to the board, scored against the user's resume.`),
-        }),
-      })
-    }
+    toolset.add_jobs_batch = tool({
+      description: `Add ALL relevant job opportunities from the search results to the user's Kanban board in a SINGLE call. Pass an array of up to ${KANBAN_LIMIT} jobs. Call this tool EXACTLY ONCE — never more than once.`,
+      inputSchema: z.object({
+        jobs: z
+          .array(jobSchema)
+          .min(1)
+          .max(3)
+          .describe(`Array of up to 3 jobs to add to the board, scored against the user's resume.`),
+      }),
+    })
 
     // Queue and retry the LLM call to reduce rate limit errors
     const result = await llmQueue.add(() =>
       withRetry(async () =>
         streamText({
           model: google("gemini-2.5-flash"),
-      system: `You are a Career Strategist AI assistant helping users find real job opportunities tailored to their background.
+          system: `You are an elite Career Strategist AI assistant helping users find highly relevant job opportunities.
 
-${
-  resumeText
-    ? `=== USER RESUME ===
+${resumeText
+              ? `=== USER RESUME ===
 ${resumeText}
 === END RESUME ===
 
-Use the resume above as the GROUND TRUTH for the user's skills, experience, and background. Every match assessment MUST be based on this resume.`
-    : "NOTE: The user has not provided a resume yet. If they ask for jobs without a resume, still help them, but mention they should add their resume to the panel for better-tailored matches."
-}
+CRITICAL: You MUST use the resume above as the absolute GROUND TRUTH. Extract the user's core skills, frameworks, experience level, and preferred roles. Your job search MUST heavily rely on these details.`
+              : "NOTE: The user has not provided a resume yet. Suggest they add one for better matches."
+            }
 
-WORKFLOW (exactly 2 steps — do not deviate):
-1. Call search_jobs ONCE with a query that reflects the user's resume (e.g., if the resume says "5 years React + Node", search "senior react node developer remote jobs").
-2. Call add_jobs_batch ONCE with an array of up to 3 jobs — one per search result. Do NOT make a separate tool call per job.
-3. After add_jobs_batch completes, stop. Do NOT respond with any text message. Do NOT call any more tools.
+WORKFLOW (Sequential steps):
+STEP 1. Analyze the user's resume/message and call the \`search_jobs\` tool with a highly targeted query (e.g., "Senior React TypeScript frontend remote jobs"). DO NOT call any other tool yet.
+STEP 2. Wait for the \`search_jobs\` results.
+STEP 3. Call \`add_jobs_batch\` with an array of up to 3 jobs based strictly on the actual search results. Do NOT make up jobs.
+STEP 4. After \`add_jobs_batch\` completes, stop and reply to the user.
 
 For EACH job in the add_jobs_batch array:
-- Compute matchPercentage HONESTLY against the resume:
-   - 90-100 = strong match (most required skills present, right experience level).
-   - 70-89 = good match (many skills overlap, minor gaps).
-   - 50-69 = partial match (some core skills missing).
-   - Below 50 = weak match — still include it but score it low.
-- Populate missingSkills with the SPECIFIC skills the job requires that are NOT in the user's resume.
-- Include the description field with a 2-4 sentence summary of the role, derived from the search result content.
-- Pass through the real link from the search result — never fabricate URLs.
+- Compute matchPercentage HONESTLY based on how well the job requirements match the user's resume skills.
+- Populate missingSkills with specific skills required by the job but missing from the resume.
+- Include a 2-4 sentence description summarizing the role based on the search result.
+- Use the exact URL from the search results.
 
 STRICT RULES:
-- Call search_jobs ONCE, then add_jobs_batch ONCE, then respond with text. No other patterns.
-- NEVER hallucinate jobs — only use real search results.
-- NEVER call add_jobs_batch more than once per user request.
-- Match scoring MUST reflect the actual resume, not generic estimates.
-- ${alreadyBatched ? "The user already has their job batch this turn. Respond with text only — do NOT call any tools." : ""}`,
-      messages: await convertToModelMessages(messages),
-      // Hard ceiling: 1 search_jobs + 1 add_jobs_batch = 2 tool steps, stop after.
-      stopWhen: stepCountIs(3),
-      tools: toolset,
-      onStepFinish: ({ toolCalls, finishReason }) => {
-        console.log(
-          "[v0] step finished — reason:",
-          finishReason,
-          "toolCalls:",
-          toolCalls?.map((t) => t.toolName),
-        )
-      },
+- DO NOT call \`add_jobs_batch\` until you have the results from \`search_jobs\`. (No parallel tool calling).
+- NEVER hallucinate jobs.
+- Match scoring MUST reflect the actual resume.`,
+          messages: await convertToModelMessages(messages),
+          // Hard ceiling: 1 search_jobs + 1 add_jobs_batch = 2 tool steps, stop after.
+          stopWhen: stepCountIs(3),
+          tools: toolset,
+          onStepFinish: ({ toolCalls, finishReason }) => {
+            console.log(
+              "[v0] step finished — reason:",
+              finishReason,
+              "toolCalls:",
+              toolCalls?.map((t) => t.toolName),
+            )
+          },
         })
       )
     )

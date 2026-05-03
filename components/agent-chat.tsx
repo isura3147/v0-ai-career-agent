@@ -114,7 +114,9 @@ function MessageBubble({
               : "bg-muted text-foreground border border-border rounded-tl-sm"
           )}
           dangerouslySetInnerHTML={{
-            __html: textContent.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>"),
+            __html: textContent
+              .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+              .replace(/\n/g, "<br/>"),
           }}
         />
       </div>
