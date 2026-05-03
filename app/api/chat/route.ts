@@ -7,6 +7,57 @@ const groq = createOpenAI({
   apiKey: process.env.groq_key || "",
 })
 
+const braveSearchKey = process.env.brave_search || ""
+
+export const maxDuration = 30
+
+// Helper function to search jobs using Brave Search API
+async function searchJobsWithBrave(query: string): Promise<string> {
+  if (!braveSearchKey) {
+    return "Brave Search API key not configured. Please add brave_search to your environment variables."
+  }
+
+  try {
+    const response = await fetch("https://api.search.brave.com/res/v1/web/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-Subscription-Token": braveSearchKey,
+      },
+      body: JSON.stringify({
+        q: query,
+        count: 5,
+      }),
+    })
+
+    if (!response.ok) {
+      console.error("[v0] Brave Search error:", response.status, response.statusText)
+      return `Search failed: ${response.statusText}`
+    }
+
+    const data = await response.json()
+    
+    // Extract job listings from search results
+    const results = (data.web || [])
+      .slice(0, 5)
+      .map((result: any) => ({
+        title: result.title,
+        url: result.url,
+        description: result.description,
+      }))
+
+    if (results.length === 0) {
+      return "No job results found. Try a more specific search query."
+    }
+
+    return JSON.stringify(results, null, 2)
+  } catch (error) {
+    console.error("[v0] Brave Search error:", error)
+    return `Error searching jobs: ${error instanceof Error ? error.message : "Unknown error"}`
+  }
+}
+
 export const maxDuration = 30
 
 export async function POST(req: Request) {
@@ -15,19 +66,35 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model: groq("llama-3.3-70b-versatile"),
-      system: `You are a Career Strategist AI assistant helping users find job opportunities.
+      system: `You are a Career Strategist AI assistant helping users find real job opportunities.
 
-STRICT RULES - YOU MUST FOLLOW THESE:
-1. When asked to add "a job" (singular), call add_to_kanban EXACTLY ONCE, then STOP and respond with text.
-2. When asked to add "jobs" (plural), call add_to_kanban AT MOST 2 times, then STOP and respond with text.
-3. NEVER call add_to_kanban more than 2 times in a single response.
-4. After ANY tool call, you MUST respond with a text summary. Do NOT call more tools.
-5. If you don't have real job data, create realistic example jobs but be honest they are examples.
-6. Be conversational and explain why jobs match the user's profile.`,
+WORKFLOW:
+1. When user asks for jobs, FIRST call search_jobs with a relevant query (e.g., "javascript developer jobs remote").
+2. THEN review the search results and identify the best 1-3 matches.
+3. For each good match, call add_to_kanban ONCE with real job data from the search results.
+4. After adding jobs, respond with text explaining what you found and added.
+
+STRICT RULES:
+- Call search_jobs first to get REAL job data.
+- NEVER add_to_kanban more than 2 times per request.
+- NEVER make up or hallucinate jobs - only use search results.
+- Be honest about match percentages based on job description.
+- Stop after adding jobs - do not call more tools.`,
       messages: await convertToModelMessages(messages),
-      maxSteps: 2, // Strict limit: 1 tool call + 1 response
+      maxSteps: 4, // search_jobs (1 step) + add_to_kanban x2 (2 steps) + response
       tools: {
-        // TODO: Inject Brave MCP Tool Here (use braveSearchKey for API calls)
+        search_jobs: tool({
+          description:
+            "Search for real job opportunities using Brave Search. Returns actual job listings from the web.",
+          inputSchema: z.object({
+            query: z
+              .string()
+              .describe("Search query for jobs (e.g., 'senior react developer remote jobs')"),
+          }),
+          execute: async ({ query }) => {
+            return await searchJobsWithBrave(query)
+          },
+        }),
 
         // add_to_kanban has no execute function — handled client-side via onToolCall
         add_to_kanban: tool({
