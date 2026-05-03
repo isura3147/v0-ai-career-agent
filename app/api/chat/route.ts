@@ -171,7 +171,7 @@ Use the resume above as the GROUND TRUTH for the user's skills, experience, and 
 WORKFLOW (exactly 2 steps — do not deviate):
 1. Call search_jobs ONCE with a query that reflects the user's resume (e.g., if the resume says "5 years React + Node", search "senior react node developer remote jobs").
 2. Call add_jobs_batch ONCE with an array of up to 3 jobs — one per search result. Do NOT make a separate tool call per job.
-3. After add_jobs_batch completes, respond with ONLY this exact text: "Done! I've added the jobs to your board." — nothing more.
+3. After add_jobs_batch completes, stop. Do NOT respond with any text message. Do NOT call any more tools.
 
 For EACH job in the add_jobs_batch array:
 - Compute matchPercentage HONESTLY against the resume:
@@ -190,9 +190,8 @@ STRICT RULES:
 - Match scoring MUST reflect the actual resume, not generic estimates.
 - ${alreadyBatched ? "The user already has their job batch this turn. Respond with text only — do NOT call any tools." : ""}`,
       messages: await convertToModelMessages(messages),
-      // Hard ceiling on server-side step loop:
-      // 1 search_jobs + 1 add_jobs_batch + 1 final summary = 3, with a small buffer.
-      stopWhen: stepCountIs(4),
+      // Hard ceiling: 1 search_jobs + 1 add_jobs_batch = 2 tool steps, stop after.
+      stopWhen: stepCountIs(3),
       tools: toolset,
       onStepFinish: ({ toolCalls, finishReason }) => {
         console.log(

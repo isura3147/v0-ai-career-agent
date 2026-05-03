@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from "react"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai"
+import { DefaultChatTransport } from "ai"
 import { Send, Bot, User, Loader2, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -216,18 +216,30 @@ function ProgressIndicator() {
 }
 
 // --------------------------------------------------------------------------
+// Detect if a user message is a job search request
+// --------------------------------------------------------------------------
+const JOB_SEARCH_KEYWORDS = /\b(find|search|look|get|show|fetch|discover|explore|remot|job|role|position|opportunit|hire|hiring|hiring|career)\b/i
+
+function isJobSearchMessage(text: string): boolean {
+  return JOB_SEARCH_KEYWORDS.test(text)
+}
+
+// --------------------------------------------------------------------------
 // Agent Chat Panel
 // --------------------------------------------------------------------------
 export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [input, setInput] = useState("")
+  // Track whether the current/last request was a job search so we only
+  // show the progress bar for job searches, not regular chat messages.
+  const [isJobSearch, setIsJobSearch] = useState(false)
 
   const resumeRef = useRef(resume)
   useEffect(() => {
     resumeRef.current = resume
   }, [resume])
 
-  const { messages, sendMessage, status, addToolOutput, error, stop } = useChat({
+  const { messages, sendMessage, status, error, stop } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       prepareSendMessagesRequest: ({ messages, id }) => ({
@@ -238,7 +250,8 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
         },
       }),
     }),
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    // Do NOT auto-send after tool calls — this is what causes the unwanted
+    // follow-up LLM request after add_jobs_batch completes.
     onToolCall({ toolCall }) {
       if (toolCall.toolName === "add_jobs_batch") {
         const inp = toolCall.input as { jobs?: AddToKanbanArgs[] }
@@ -246,16 +259,19 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
         for (const job of jobs) {
           onAddJob?.(job)
         }
-        addToolOutput({
-          tool: "add_jobs_batch",
-          toolCallId: toolCall.toolCallId,
-          output: { success: true, count: jobs.length },
-        })
+        // Return the result directly — no addToolOutput call so the AI SDK
+        // does NOT automatically trigger another round-trip to the LLM.
+        return { success: true, count: jobs.length }
       }
     },
   })
 
   const isStreaming = status === "streaming" || status === "submitted"
+
+  // Reset isJobSearch when streaming finishes
+  useEffect(() => {
+    if (!isStreaming) setIsJobSearch(false)
+  }, [isStreaming])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -263,6 +279,7 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return
+    setIsJobSearch(isJobSearchMessage(input))
     sendMessage({ text: input })
     setInput("")
   }
@@ -314,8 +331,22 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
             const last = messages[messages.length - 1]
             const lastIsAssistantWithText =
               last?.role === "assistant" && getMessageText(last.parts as any).trim().length > 0
-            if (!lastIsAssistantWithText) return <ProgressIndicator />
-            return null
+            if (lastIsAssistantWithText) return null
+            // Only show the progress bar for job search requests; regular
+            // chat messages get a simple pulsing dots bubble instead.
+            if (isJobSearch) return <ProgressIndicator />
+            return (
+              <div className="flex gap-3 items-start">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-muted border border-border">
+                  <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+                </div>
+                <div className="bg-muted border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse" style={{ animationDelay: "300ms" }} />
+                </div>
+              </div>
+            )
           })()}
         <div ref={bottomRef} />
       </div>
