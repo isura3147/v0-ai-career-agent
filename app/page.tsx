@@ -1,10 +1,47 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { ResumePanel } from "@/components/resume-panel"
-import { AgentChat } from "@/components/agent-chat"
+import { AgentChat, type AddToKanbanArgs } from "@/components/agent-chat"
 import { SkillGapWidget } from "@/components/skill-gap-widget"
-import { KanbanBoard } from "@/components/kanban-board"
+import { KanbanBoard, type JobCard, STORAGE_KEY, getInitialJobs } from "@/components/kanban-board"
 import { BrainCircuit } from "lucide-react"
 
 export default function Page() {
+  // Lift Kanban state to the page level so AgentChat can add jobs
+  const [jobs, setJobs] = useState<JobCard[]>([])
+  const [mounted, setMounted] = useState(false)
+
+  // Initialize jobs from localStorage after mount (client-side only)
+  useEffect(() => {
+    setJobs(getInitialJobs())
+    setMounted(true)
+  }, [])
+
+  // Handle add_to_kanban tool calls from the AI agent
+  const handleAddJob = (args: AddToKanbanArgs) => {
+    const newJob: JobCard = {
+      id: `job-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      title: args.title,
+      company: args.company,
+      matchPercent: args.matchPercentage,
+      missingSkills: args.missingSkills,
+      column: "discovered", // New jobs always go to Discovered
+      location: args.link, // Using link as location for now; could parse or add separate field
+    }
+    setJobs((prev) => [newJob, ...prev])
+  }
+
+  // Persist to localStorage whenever jobs change
+  useEffect(() => {
+    if (!mounted) return
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(jobs))
+    } catch {
+      // ignore
+    }
+  }, [jobs, mounted])
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
       {/* Top Nav */}
@@ -24,16 +61,16 @@ export default function Page() {
 
       {/* Main two-column grid */}
       <main className="flex-1 grid grid-cols-[35%_65%] gap-0 overflow-hidden min-h-0">
-        {/* ── Left Column: Resume + Agent Chat ── */}
+        {/* Left Column: Resume + Agent Chat */}
         <section className="flex flex-col gap-3 p-4 border-r border-border overflow-hidden min-h-0">
           <ResumePanel />
-          <AgentChat />
+          <AgentChat onAddJob={handleAddJob} />
         </section>
 
-        {/* ── Right Column: Skill Gap + Kanban ── */}
+        {/* Right Column: Skill Gap + Kanban */}
         <section className="flex flex-col gap-3 p-4 overflow-hidden min-h-0">
           <SkillGapWidget />
-          <KanbanBoard />
+          <KanbanBoard jobs={jobs} setJobs={setJobs} />
         </section>
       </main>
     </div>

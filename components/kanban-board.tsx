@@ -163,19 +163,24 @@ function ColumnHeader({ col, count }: { col: (typeof COLUMNS)[0]; count: number 
 // --------------------------------------------------------------------------
 // Kanban Board
 // --------------------------------------------------------------------------
-const STORAGE_KEY = "career-strategist-kanban"
+export const STORAGE_KEY = "career-strategist-kanban"
 
-export function KanbanBoard() {
-  const [jobs, setJobs] = useState<JobCard[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_JOBS
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      return stored ? (JSON.parse(stored) as JobCard[]) : DEFAULT_JOBS
-    } catch {
-      return DEFAULT_JOBS
-    }
-  })
+export function getInitialJobs(): JobCard[] {
+  if (typeof window === "undefined") return DEFAULT_JOBS
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    return stored ? (JSON.parse(stored) as JobCard[]) : DEFAULT_JOBS
+  } catch {
+    return DEFAULT_JOBS
+  }
+}
 
+interface KanbanBoardProps {
+  jobs: JobCard[]
+  setJobs: React.Dispatch<React.SetStateAction<JobCard[]>>
+}
+
+export function KanbanBoard({ jobs, setJobs }: KanbanBoardProps) {
   // Persist to localStorage whenever jobs change
   useEffect(() => {
     try {

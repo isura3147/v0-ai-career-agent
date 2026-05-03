@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from "react"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai"
 import { Send, Bot, User, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -122,14 +122,45 @@ function MessageBubble({
 }
 
 // --------------------------------------------------------------------------
+// Types for add_to_kanban tool arguments
+// --------------------------------------------------------------------------
+export interface AddToKanbanArgs {
+  title: string
+  company: string
+  link: string
+  matchPercentage: number
+  missingSkills: string[]
+}
+
+interface AgentChatProps {
+  onAddJob?: (args: AddToKanbanArgs) => void
+}
+
+// --------------------------------------------------------------------------
 // Agent Chat Panel — wired up with useChat()
 // --------------------------------------------------------------------------
-export function AgentChat() {
+export function AgentChat({ onAddJob }: AgentChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [input, setInput] = useState("")
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, addToolOutput } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
+    // Automatically continue the conversation after client-side tool execution
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    onToolCall({ toolCall }) {
+      // Handle client-side tool execution for add_to_kanban
+      if (toolCall.toolName === "add_to_kanban") {
+        const args = toolCall.input as AddToKanbanArgs
+        // Add the job to Kanban board
+        onAddJob?.(args)
+        // Provide tool output back to the model
+        addToolOutput({
+          tool: "add_to_kanban",
+          toolCallId: toolCall.toolCallId,
+          output: { success: true, job: args },
+        })
+      }
+    },
   })
 
   const isStreaming = status === "streaming" || status === "submitted"

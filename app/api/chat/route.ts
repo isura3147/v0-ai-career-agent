@@ -14,6 +14,7 @@ export async function POST(req: Request) {
     tools: {
       // TODO: Inject Brave MCP Tool Here
 
+      // add_to_kanban has no execute function — handled client-side via onToolCall
       add_to_kanban: tool({
         description:
           "Add a job opportunity to the user's Kanban board in the Discovered column.",
@@ -28,9 +29,6 @@ export async function POST(req: Request) {
             .array(z.string())
             .describe("Skills the user is missing for this role"),
         }),
-        execute: async (data) => {
-          return { success: true, job: data }
-        },
       }),
     },
   })
