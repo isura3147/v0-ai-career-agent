@@ -2,30 +2,18 @@ import { streamText, tool, convertToModelMessages } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { z } from "zod"
 
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.gemini_key || "",
+})
+
+// Brave Search API key for future MCP integration
+const braveSearchKey = process.env.brave_search || ""
+
 export const maxDuration = 30
 
 export async function POST(req: Request) {
   try {
-    // Check for API key at request time (not module load time)
-    const apiKey = process.env.gemini_key
-    console.log("[v0] API Key check - gemini_key exists:", !!apiKey)
-    console.log("[v0] Available env vars:", Object.keys(process.env).filter(k => k.toLowerCase().includes('gemini') || k.toLowerCase().includes('google')))
-    
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ 
-          error: "Missing gemini_key environment variable. Please add it in Settings > Vars." 
-        }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      )
-    }
-
-    const google = createGoogleGenerativeAI({
-      apiKey: apiKey,
-    })
-
     const { messages } = await req.json()
-    console.log("[v0] Messages received:", messages.length)
 
     const result = streamText({
       model: google("gemini-3-flash"),
@@ -33,7 +21,7 @@ export async function POST(req: Request) {
         "You are an autonomous Career Strategist. Extract skills, search for jobs, and save matches using your tools.",
       messages: await convertToModelMessages(messages),
       tools: {
-        // TODO: Inject Brave MCP Tool Here
+        // TODO: Inject Brave MCP Tool Here (use braveSearchKey for API calls)
 
         // add_to_kanban has no execute function — handled client-side via onToolCall
         add_to_kanban: tool({
