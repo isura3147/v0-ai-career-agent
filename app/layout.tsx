@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'AI Career Strategist',
-  description: 'Autonomous AI agent that finds jobs, analyzes skill gaps, and organizes your career pipeline.',
+  title: 'JobPilot — AI Job Search Agent',
+  description: 'Autonomous AI agent that searches real job listings, scores them against your resume, and organizes your pipeline.',
   generator: 'v0.app',
   icons: {
     icon: [
