@@ -50,7 +50,7 @@ async function searchJobsWithTavily(query: string): Promise<string> {
     return "Tavily Search API key not configured. Please add TAVILY_API_KEY to your environment variables."
   }
 
-  try {
+    try {
     // 10 second timeout so the agent never hangs forever
     const response = await fetch("https://api.tavily.com/search", {
       method: "POST",
@@ -60,7 +60,18 @@ async function searchJobsWithTavily(query: string): Promise<string> {
       body: JSON.stringify({
         api_key: tavilyKey,
         query: query,
-        max_results: 5,
+        max_results: 10,
+        exclude_domains: [
+          "indeed.com",
+          "linkedin.com",
+          "glassdoor.com",
+          "ziprecruiter.com",
+          "builtin.com",
+          "dice.com",
+          "monster.com",
+          "simplyhired.com",
+          "adzuna.com",
+        ],
         include_answer: false,
       }),
       signal: AbortSignal.timeout(10_000),
@@ -82,7 +93,8 @@ async function searchJobsWithTavily(query: string): Promise<string> {
       return "No results found. Try a more specific search query."
     }
 
-    const results = rawResults.slice(0, 3).map((r: any) => ({
+    // Pass up to 10 results to the LLM so it has a wide pool to pick the best 3 from.
+    const results = rawResults.map((r: any) => ({
       title: r.title,
       url: r.url,
       description: r.content || r.snippet || "",
@@ -181,21 +193,22 @@ export async function POST(req: Request) {
       withRetry(async () =>
         streamText({
           model: google("gemini-2.5-flash"),
-          system: `You are an elite Career Strategist AI assistant helping users find highly relevant job opportunities.
+      system: `You are an elite Career Strategist AI assistant helping users find highly relevant job opportunities.
 
-${resumeText
-              ? `=== USER RESUME ===
+${
+  resumeText
+    ? `=== USER RESUME ===
 ${resumeText}
 === END RESUME ===
 
 CRITICAL: You MUST use the resume above as the absolute GROUND TRUTH. Extract the user's core skills, frameworks, experience level, and preferred roles. Your job search MUST heavily rely on these details.`
-              : "NOTE: The user has not provided a resume yet. Suggest they add one for better matches."
-            }
+    : "NOTE: The user has not provided a resume yet. Suggest they add one for better matches."
+}
 
 WORKFLOW (Sequential steps):
 STEP 1. Analyze the user's resume/message and call the \`search_jobs\` tool with a highly targeted query (e.g., "Senior React TypeScript frontend remote jobs"). DO NOT call any other tool yet.
 STEP 2. Wait for the \`search_jobs\` results.
-STEP 3. Call \`add_jobs_batch\` with an array of up to 3 jobs based strictly on the actual search results. Do NOT make up jobs.
+STEP 3. Call \`add_jobs_batch\` with an array of up to 3 specific job postings based strictly on the actual search results. ONLY select direct job listings. IGNORE generic job search results or aggregators. Do NOT make up jobs.
 STEP 4. After \`add_jobs_batch\` completes, stop and reply to the user.
 
 For EACH job in the add_jobs_batch array:
@@ -208,18 +221,18 @@ STRICT RULES:
 - DO NOT call \`add_jobs_batch\` until you have the results from \`search_jobs\`. (No parallel tool calling).
 - NEVER hallucinate jobs.
 - Match scoring MUST reflect the actual resume.`,
-          messages: await convertToModelMessages(messages),
-          // Hard ceiling: 1 search_jobs + 1 add_jobs_batch = 2 tool steps, stop after.
-          stopWhen: stepCountIs(3),
-          tools: toolset,
-          onStepFinish: ({ toolCalls, finishReason }) => {
-            console.log(
-              "[v0] step finished — reason:",
-              finishReason,
-              "toolCalls:",
-              toolCalls?.map((t) => t.toolName),
-            )
-          },
+      messages: await convertToModelMessages(messages),
+      // Hard ceiling: 1 search_jobs + 1 add_jobs_batch = 2 tool steps, stop after.
+      stopWhen: stepCountIs(3),
+      tools: toolset,
+      onStepFinish: ({ toolCalls, finishReason }) => {
+        console.log(
+          "[v0] step finished — reason:",
+          finishReason,
+          "toolCalls:",
+          toolCalls?.map((t) => t.toolName),
+        )
+      },
         })
       )
     )
