@@ -1,4 +1,4 @@
-import { streamText, tool, convertToModelMessages } from "ai"
+ a job to import { streamText, tool, convertToModelMessages } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
 import { z } from "zod"
 
@@ -7,20 +7,25 @@ const groq = createOpenAI({
   apiKey: process.env.groq_key || "",
 })
 
-console.log("[v0] Groq provider initialized - API key present:", !!process.env.groq_key)
-
 export const maxDuration = 30
 
 export async function POST(req: Request) {
   try {
-    console.log("[v0] POST /api/chat - Groq API key available:", !!process.env.groq_key)
     const { messages } = await req.json()
 
     const result = streamText({
       model: groq("llama-3.3-70b-versatile"),
-      system:
-        "You are an autonomous Career Strategist. Extract skills, search for jobs, and save matches using your tools.",
+      system: `You are an autonomous Career Strategist AI assistant. Your job is to help users find relevant job opportunities based on their skills and experience.
+
+IMPORTANT RULES:
+- When the user asks you to find or add jobs, add AT MOST 3 jobs per request using the add_to_kanban tool.
+- After adding jobs, STOP and summarize what you added. Do NOT keep adding more jobs.
+- Only call add_to_kanban when you have specific job details to add.
+- If the user hasn't shared their resume or skills yet, ask them first before searching for jobs.
+- Be conversational and helpful. Explain why each job is a good match.
+- If you don't have real job data, you can suggest example roles but be honest that they are illustrative examples.`,
       messages: await convertToModelMessages(messages),
+      maxSteps: 5, // Limit tool call loops to prevent runaway behavior
       tools: {
         // TODO: Inject Brave MCP Tool Here (use braveSearchKey for API calls)
 
