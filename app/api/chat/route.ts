@@ -149,7 +149,7 @@ export async function POST(req: Request) {
     }
 
     const result = streamText({
-      model: groq("gemma2-9b-it"),
+      model: groq("openai/gpt-oss-120b"),
       system: `You are a Career Strategist AI assistant helping users find real job opportunities.
 
 WORKFLOW:
