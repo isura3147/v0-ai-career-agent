@@ -58,17 +58,25 @@ function MessageBubble({
   message: {
     id: string
     role: string
-    parts?: Array<{ type: string; text?: string; toolInvocation?: { toolName: string; state: string } }>
+    parts?: Array<{
+      type: string
+      text?: string
+      toolInvocation?: { toolName: string; state: string }
+      toolName?: string
+      state?: string
+    }>
   }
 }) {
   const isUser = message.role === "user"
   const parts = message.parts ?? []
 
+  console.log("[v0] MessageBubble parts:", parts)
+
   // Separate text parts from tool invocation parts
+  // AI SDK 6 uses type: "tool-invocation" with toolName and state directly on the part
   const textContent = getMessageText(parts)
   const toolParts = parts.filter(
-    (p): p is { type: "tool-invocation"; toolInvocation: { toolName: string; state: string } } =>
-      p.type === "tool-invocation"
+    (p) => p.type === "tool-invocation"
   )
 
   // If there are only tool invocations, render them
@@ -76,7 +84,11 @@ function MessageBubble({
     return (
       <div className="flex flex-col gap-2 pl-8">
         {toolParts.map((part, i) => (
-          <ToolPill key={i} toolName={part.toolInvocation.toolName} state={part.toolInvocation.state} />
+          <ToolPill
+            key={i}
+            toolName={part.toolName ?? part.toolInvocation?.toolName ?? "unknown"}
+            state={part.state ?? part.toolInvocation?.state ?? "input-available"}
+          />
         ))}
       </div>
     )
@@ -113,7 +125,11 @@ function MessageBubble({
       {toolParts.length > 0 && (
         <div className="flex flex-col gap-2 pl-8">
           {toolParts.map((part, i) => (
-            <ToolPill key={i} toolName={part.toolInvocation.toolName} state={part.toolInvocation.state} />
+            <ToolPill
+              key={i}
+              toolName={part.toolName ?? part.toolInvocation?.toolName ?? "unknown"}
+              state={part.state ?? part.toolInvocation?.state ?? "input-available"}
+            />
           ))}
         </div>
       )}
@@ -143,14 +159,16 @@ export function AgentChat({ onAddJob }: AgentChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [input, setInput] = useState("")
 
-  const { messages, sendMessage, status, addToolOutput } = useChat({
+  const { messages, sendMessage, status, addToolOutput, error } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
     // Automatically continue the conversation after client-side tool execution
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall({ toolCall }) {
+      console.log("[v0] onToolCall fired:", toolCall.toolName, toolCall)
       // Handle client-side tool execution for add_to_kanban
       if (toolCall.toolName === "add_to_kanban") {
         const args = toolCall.input as AddToKanbanArgs
+        console.log("[v0] add_to_kanban args:", args)
         // Add the job to Kanban board
         onAddJob?.(args)
         // Provide tool output back to the model
@@ -163,6 +181,15 @@ export function AgentChat({ onAddJob }: AgentChatProps) {
     },
   })
 
+  // Debug logging
+  useEffect(() => {
+    console.log("[v0] useChat status:", status)
+    console.log("[v0] useChat messages:", messages)
+    if (error) {
+      console.error("[v0] useChat error:", error)
+    }
+  }, [messages, status, error])
+
   const isStreaming = status === "streaming" || status === "submitted"
 
   // Auto-scroll to bottom when messages change
@@ -172,6 +199,7 @@ export function AgentChat({ onAddJob }: AgentChatProps) {
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return
+    console.log("[v0] Sending message:", input)
     sendMessage({ text: input })
     setInput("")
   }
@@ -194,9 +222,14 @@ export function AgentChat({ onAddJob }: AgentChatProps) {
 
       {/* Scrollable messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 min-h-0">
-        {messages.length === 0 && (
+        {messages.length === 0 && !error && (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
             Ask the agent to find jobs, analyze skill gaps, or add matches to your board.
+          </div>
+        )}
+        {error && (
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+            <strong>Error:</strong> {error.message}
           </div>
         )}
         {messages.map((msg) => (
