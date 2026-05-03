@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const { messages } = await req.json()
 
     const result = streamText({
-      model: google("gemini-1.5-flash"),
+      model: google("gemini-3-flash"),
       system:
         "You are an autonomous Career Strategist. Extract skills, search for jobs, and save matches using your tools.",
       messages: await convertToModelMessages(messages),
