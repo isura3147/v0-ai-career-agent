@@ -1,4 +1,4 @@
- a job to import { streamText, tool, convertToModelMessages } from "ai"
+import { streamText, tool, convertToModelMessages } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
 import { z } from "zod"
 
