@@ -164,9 +164,11 @@ export function AgentChat({ onAddJob }: AgentChatProps) {
     // Automatically continue the conversation after client-side tool execution
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall({ toolCall }) {
+      console.log("[v0] onToolCall fired:", toolCall.toolName, toolCall)
       // Handle client-side tool execution for add_to_kanban
       if (toolCall.toolName === "add_to_kanban") {
         const args = toolCall.input as AddToKanbanArgs
+        console.log("[v0] Adding job to kanban:", args.title, "@", args.company)
         // Add the job to Kanban board
         onAddJob?.(args)
         // Provide tool output back to the model
