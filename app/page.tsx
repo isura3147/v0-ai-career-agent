@@ -30,7 +30,7 @@ export default function Page() {
       company: args.company,
       matchPercent: args.matchPercentage,
       missingSkills: args.missingSkills,
-      column: "discovered", // New jobs always go to Discovered
+      column: "discovered" as const,
       link: args.link,
       description: args.description ?? "",
     }
