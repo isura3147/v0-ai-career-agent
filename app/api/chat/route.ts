@@ -58,8 +58,6 @@ async function searchJobsWithBrave(query: string): Promise<string> {
   }
 }
 
-export const maxDuration = 30
-
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json()
