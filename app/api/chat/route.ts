@@ -149,7 +149,7 @@ export async function POST(req: Request) {
     }
 
     const result = streamText({
-      model: groq("mixtral-8x7b-32768"),
+      model: groq("gemma2-9b-it"),
       system: `You are a Career Strategist AI assistant helping users find real job opportunities.
 
 WORKFLOW:
