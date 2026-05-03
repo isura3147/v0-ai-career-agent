@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai"
-import { Send, Bot, User, Loader2 } from "lucide-react"
+import { Send, Bot, User, Loader2, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -70,7 +70,7 @@ function MessageBubble({
   const isUser = message.role === "user"
   const parts = message.parts ?? []
 
-  console.log("[v0] MessageBubble parts:", parts)
+
 
   // Separate text parts from tool invocation parts
   // AI SDK 6 uses type: "tool-invocation" with toolName and state directly on the part
@@ -159,16 +159,14 @@ export function AgentChat({ onAddJob }: AgentChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [input, setInput] = useState("")
 
-  const { messages, sendMessage, status, addToolOutput, error } = useChat({
+  const { messages, sendMessage, status, addToolOutput, error, stop } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
     // Automatically continue the conversation after client-side tool execution
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall({ toolCall }) {
-      console.log("[v0] onToolCall fired:", toolCall.toolName, toolCall)
       // Handle client-side tool execution for add_to_kanban
       if (toolCall.toolName === "add_to_kanban") {
         const args = toolCall.input as AddToKanbanArgs
-        console.log("[v0] add_to_kanban args:", args)
         // Add the job to Kanban board
         onAddJob?.(args)
         // Provide tool output back to the model
@@ -181,15 +179,6 @@ export function AgentChat({ onAddJob }: AgentChatProps) {
     },
   })
 
-  // Debug logging
-  useEffect(() => {
-    console.log("[v0] useChat status:", status)
-    console.log("[v0] useChat messages:", messages)
-    if (error) {
-      console.error("[v0] useChat error:", error)
-    }
-  }, [messages, status, error])
-
   const isStreaming = status === "streaming" || status === "submitted"
 
   // Auto-scroll to bottom when messages change
@@ -199,7 +188,6 @@ export function AgentChat({ onAddJob }: AgentChatProps) {
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return
-    console.log("[v0] Sending message:", input)
     sendMessage({ text: input })
     setInput("")
   }
@@ -248,14 +236,25 @@ export function AgentChat({ onAddJob }: AgentChatProps) {
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
           disabled={isStreaming}
         />
-        <Button
-          size="icon"
-          onClick={handleSend}
-          disabled={isStreaming || !input.trim()}
-          className="shrink-0 bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          {isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        </Button>
+        {isStreaming ? (
+          <Button
+            size="icon"
+            onClick={() => stop()}
+            className="shrink-0 bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity"
+            title="Stop agent"
+          >
+            <Square className="w-4 h-4" />
+          </Button>
+        ) : (
+          <Button
+            size="icon"
+            onClick={handleSend}
+            disabled={!input.trim()}
+            className="shrink-0 bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        )}
       </div>
     </div>
   )

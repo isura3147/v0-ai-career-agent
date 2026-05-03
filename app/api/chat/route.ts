@@ -15,17 +15,17 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model: groq("llama-3.3-70b-versatile"),
-      system: `You are an autonomous Career Strategist AI assistant. Your job is to help users find relevant job opportunities based on their skills and experience.
+      system: `You are a Career Strategist AI assistant helping users find job opportunities.
 
-IMPORTANT RULES:
-- When the user asks you to find or add jobs, add AT MOST 3 jobs per request using the add_to_kanban tool.
-- After adding jobs, STOP and summarize what you added. Do NOT keep adding more jobs.
-- Only call add_to_kanban when you have specific job details to add.
-- If the user hasn't shared their resume or skills yet, ask them first before searching for jobs.
-- Be conversational and helpful. Explain why each job is a good match.
-- If you don't have real job data, you can suggest example roles but be honest that they are illustrative examples.`,
+STRICT RULES - YOU MUST FOLLOW THESE:
+1. When asked to add "a job" (singular), call add_to_kanban EXACTLY ONCE, then STOP and respond with text.
+2. When asked to add "jobs" (plural), call add_to_kanban AT MOST 2 times, then STOP and respond with text.
+3. NEVER call add_to_kanban more than 2 times in a single response.
+4. After ANY tool call, you MUST respond with a text summary. Do NOT call more tools.
+5. If you don't have real job data, create realistic example jobs but be honest they are examples.
+6. Be conversational and explain why jobs match the user's profile.`,
       messages: await convertToModelMessages(messages),
-      maxSteps: 5, // Limit tool call loops to prevent runaway behavior
+      maxSteps: 2, // Strict limit: 1 tool call + 1 response
       tools: {
         // TODO: Inject Brave MCP Tool Here (use braveSearchKey for API calls)
 
