@@ -153,46 +153,63 @@ interface AgentChatProps {
 }
 
 // --------------------------------------------------------------------------
-// Rotating loading indicator
+// Progress bar shown while the agent is working
 // --------------------------------------------------------------------------
-const STATUS_WORDS = [
-  "Thinking",
-  "Searching",
-  "Fetching jobs",
-  "Analyzing matches",
-  "Scoring fit",
-  "Reviewing skills",
-  "Adding to board",
-  "Finalizing",
+const PROGRESS_STAGES = [
+  { label: "Thinking", target: 15 },
+  { label: "Searching jobs", target: 40 },
+  { label: "Analyzing matches", target: 65 },
+  { label: "Scoring fit", target: 82 },
+  { label: "Adding to board", target: 94 },
+  { label: "Finalizing", target: 99 },
 ]
 
-function ThinkingIndicator() {
-  const [wordIndex, setWordIndex] = useState(0)
+function ProgressIndicator() {
+  const [progress, setProgress] = useState(0)
+  const [stageIndex, setStageIndex] = useState(0)
 
   useEffect(() => {
+    // Advance progress toward the next stage target, then move to the next stage
     const id = setInterval(() => {
-      setWordIndex((prev) => (prev + 1) % STATUS_WORDS.length)
-    }, 1400)
+      setProgress((prev) => {
+        const stage = PROGRESS_STAGES[stageIndex] ?? PROGRESS_STAGES[PROGRESS_STAGES.length - 1]
+        const gap = stage.target - prev
+        if (gap <= 0.5) {
+          setStageIndex((s) => Math.min(s + 1, PROGRESS_STAGES.length - 1))
+          return prev
+        }
+        // Ease toward target — fast at first, slows near target
+        return prev + Math.max(0.4, gap * 0.08)
+      })
+    }, 120)
     return () => clearInterval(id)
-  }, [])
+  }, [stageIndex])
+
+  const label = PROGRESS_STAGES[Math.min(stageIndex, PROGRESS_STAGES.length - 1)].label
 
   return (
     <div className="flex gap-3 items-start">
       <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-muted border border-border">
         <Bot className="w-3.5 h-3.5 text-muted-foreground" />
       </div>
-      <div className="bg-muted border border-border rounded-2xl rounded-tl-sm px-4 py-2.5 flex items-center gap-3">
-        <div className="flex gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: "0ms" }} />
-          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: "200ms" }} />
-          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: "400ms" }} />
+      <div className="flex-1 bg-muted border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span
+            key={label}
+            className="text-xs text-muted-foreground font-mono animate-in fade-in duration-300"
+          >
+            {label}…
+          </span>
+          <span className="text-xs text-muted-foreground font-mono tabular-nums">
+            {Math.round(progress)}%
+          </span>
         </div>
-        <span
-          key={wordIndex}
-          className="text-sm text-muted-foreground font-mono animate-in fade-in slide-in-from-bottom-1 duration-300"
-        >
-          {STATUS_WORDS[wordIndex]}…
-        </span>
+        <div className="h-1 w-full rounded-full bg-border overflow-hidden">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-150 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
       </div>
     </div>
   )
@@ -276,19 +293,28 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
           </div>
         )}
         {error && (
-          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-            <strong>Error:</strong> {error.message}
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm">
+            <p className="font-semibold text-destructive mb-0.5">Something went wrong</p>
+            <p className="text-muted-foreground leading-relaxed">{error.message}</p>
           </div>
         )}
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
+        {messages.map((msg) => {
+          // Suppress short "Done!" confirmation messages after a job batch —
+          // the Kanban board already shows the result visually.
+          if (msg.role === "assistant") {
+            const text = getMessageText(msg.parts as any).trim()
+            if (text.length > 0 && text.length < 80 && /done|added|board/i.test(text)) {
+              return null
+            }
+          }
+          return <MessageBubble key={msg.id} message={msg} />
+        })}
         {isStreaming &&
           (() => {
             const last = messages[messages.length - 1]
             const lastIsAssistantWithText =
               last?.role === "assistant" && getMessageText(last.parts as any).trim().length > 0
-            if (!lastIsAssistantWithText) return <ThinkingIndicator />
+            if (!lastIsAssistantWithText) return <ProgressIndicator />
             return null
           })()}
         <div ref={bottomRef} />

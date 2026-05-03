@@ -53,7 +53,7 @@ async function searchJobsWithTavily(query: string): Promise<string> {
       return "No results found. Try a more specific search query."
     }
 
-    const results = rawResults.slice(0, 5).map((r: any) => ({
+    const results = rawResults.slice(0, 3).map((r: any) => ({
       title: r.title,
       url: r.url,
       description: r.content || r.snippet || "",
@@ -104,8 +104,8 @@ export async function POST(req: Request) {
     const alreadyBatched = hasBatchedJobs(messages)
     console.log("[v0] already batched jobs this turn:", alreadyBatched)
 
-    // Hard cap: max 5 jobs per batch (matches Tavily max_results).
-    const KANBAN_LIMIT = 5
+    // Hard cap: max 3 jobs per batch (matches Tavily max_results).
+    const KANBAN_LIMIT = 3
 
     // Build tools dynamically — drop add_jobs_batch once the user already
     // got their batch this turn so the model can't loop back into adding more.
@@ -143,15 +143,13 @@ export async function POST(req: Request) {
       })
 
       toolset.add_jobs_batch = tool({
-        description: `Add ALL relevant job opportunities from the search results to the user's Kanban board in a SINGLE call. Pass an array of jobs (typically one per search result, up to ${KANBAN_LIMIT}). Call this tool EXACTLY ONCE per user request — never call it more than once.`,
+        description: `Add ALL relevant job opportunities from the search results to the user's Kanban board in a SINGLE call. Pass an array of up to ${KANBAN_LIMIT} jobs. Call this tool EXACTLY ONCE — never more than once.`,
         inputSchema: z.object({
           jobs: z
             .array(jobSchema)
             .min(1)
-            .max(KANBAN_LIMIT)
-            .describe(
-              `Array of jobs to add to the board, scored against the user's resume. Include up to ${KANBAN_LIMIT} jobs.`
-            ),
+            .max(3)
+            .describe(`Array of up to 3 jobs to add to the board, scored against the user's resume.`),
         }),
       })
     }
@@ -170,10 +168,10 @@ Use the resume above as the GROUND TRUTH for the user's skills, experience, and 
     : "NOTE: The user has not provided a resume yet. If they ask for jobs without a resume, still help them, but mention they should add their resume to the panel for better-tailored matches."
 }
 
-WORKFLOW (exactly 3 steps — do not deviate):
+WORKFLOW (exactly 2 steps — do not deviate):
 1. Call search_jobs ONCE with a query that reflects the user's resume (e.g., if the resume says "5 years React + Node", search "senior react node developer remote jobs").
-2. Call add_jobs_batch ONCE with an array of jobs — include ONE entry per search result (up to ${KANBAN_LIMIT}). Do NOT make a separate tool call per job.
-3. Respond with a SINGLE text message summarizing how many jobs you added, which 1-2 are the strongest matches and why, and the common skill gaps across the listings. Do NOT call any more tools.
+2. Call add_jobs_batch ONCE with an array of up to 3 jobs — one per search result. Do NOT make a separate tool call per job.
+3. After add_jobs_batch completes, respond with ONLY this exact text: "Done! I've added the jobs to your board." — nothing more.
 
 For EACH job in the add_jobs_batch array:
 - Compute matchPercentage HONESTLY against the resume:
@@ -210,8 +208,19 @@ STRICT RULES:
     return result.toUIMessageStreamResponse()
   } catch (error) {
     console.error("[v0] API error:", error)
-    const message = error instanceof Error ? error.message : "Unknown error"
-    return new Response(JSON.stringify({ error: message }), {
+    const raw = error instanceof Error ? error.message : String(error)
+
+    // Produce a human-friendly message for common failure modes
+    let friendly = "Something went wrong. Please try again."
+    if (/rate.?limit|too many requests|429/i.test(raw)) {
+      friendly = "The AI model is currently rate-limited. Please wait 30–60 seconds and try again."
+    } else if (/timeout|timed out/i.test(raw)) {
+      friendly = "The request timed out. Please try again."
+    } else if (/api.?key|unauthorized|401/i.test(raw)) {
+      friendly = "API key error — please check your environment variables."
+    }
+
+    return new Response(JSON.stringify({ error: friendly }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     })
