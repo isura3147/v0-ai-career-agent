@@ -232,6 +232,8 @@ function isJobSearchMessage(text: string): boolean {
 export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [input, setInput] = useState("")
+  const [location, setLocation] = useState("")
+  const [isRemote, setIsRemote] = useState(false)
   // Track whether the current/last request was a job search so we only
   // show the progress bar for job searches, not regular chat messages.
   const [isJobSearch, setIsJobSearch] = useState(false)
@@ -241,6 +243,13 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
     resumeRef.current = resume
   }, [resume])
 
+  const locationRef = useRef(location)
+  const isRemoteRef = useRef(isRemote)
+  useEffect(() => {
+    locationRef.current = location
+    isRemoteRef.current = isRemote
+  }, [location, isRemote])
+
   const { messages, sendMessage, status, addToolOutput, error, stop } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
@@ -249,6 +258,8 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
           messages,
           id,
           resume: resumeRef.current,
+          location: locationRef.current,
+          isRemote: isRemoteRef.current,
         },
       }),
     }),
@@ -358,36 +369,65 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Sticky input */}
-      <div className="px-3 py-3 border-t border-border shrink-0 flex gap-2 bg-card">
-        <Input
-          placeholder="Ask the agent to find jobs, search by role, or explore opportunities…"
-          className="flex-1 text-sm"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-          disabled={isStreaming}
-        />
-        {isStreaming ? (
-          <Button
-            size="icon"
-            variant="destructive"
-            onClick={() => stop()}
-            className="shrink-0"
-            title="Stop agent"
-          >
-            <Square className="w-4 h-4" />
-          </Button>
-        ) : (
-          <Button
-            size="icon"
-            onClick={handleSend}
-            disabled={!input.trim()}
-            className="shrink-0"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
-        )}
+      {/* Sticky input & Preferences */}
+      <div className="px-3 py-3 border-t border-border shrink-0 flex flex-col gap-3 bg-card">
+        {/* Search Preferences */}
+        <div className="flex items-center gap-3 px-1 text-sm text-muted-foreground">
+          <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
+            <input 
+              type="checkbox" 
+              className="rounded border-border bg-background"
+              checked={isRemote}
+              onChange={(e) => setIsRemote(e.target.checked)}
+              disabled={isStreaming}
+            />
+            Remote Only
+          </label>
+          <div className="w-px h-4 bg-border" />
+          <div className="flex items-center gap-2 flex-1">
+            <span className="shrink-0">Location:</span>
+            <input
+              type="text"
+              placeholder="e.g. Sri Lanka, Global..."
+              className="bg-transparent border-none outline-none flex-1 text-foreground placeholder:text-muted-foreground/50 focus:ring-0"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              disabled={isStreaming}
+            />
+          </div>
+        </div>
+
+        {/* Chat Input Row */}
+        <div className="flex gap-2">
+          <Input
+            placeholder="Ask the agent to find jobs, search by role, or explore opportunities…"
+            className="flex-1 text-sm"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            disabled={isStreaming}
+          />
+          {isStreaming ? (
+            <Button
+              size="icon"
+              variant="destructive"
+              onClick={() => stop()}
+              className="shrink-0"
+              title="Stop agent"
+            >
+              <Square className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="shrink-0"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )

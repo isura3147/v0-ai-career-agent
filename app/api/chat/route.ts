@@ -7,7 +7,7 @@ const google = createGoogleGenerativeAI({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
 })
 
-export const maxDuration = 60
+export const maxDuration = 61
 
 // --------------------------------------------------------------------------
 // Request queue to prevent bursts that trigger rate limits.
@@ -137,10 +137,11 @@ export async function POST(req: Request) {
   console.log("[v0] TAVILY_API_KEY present:", !!process.env.TAVILY_API_KEY)
 
   try {
-    const { messages, resume } = await req.json()
+    const { messages, resume, location, isRemote } = await req.json()
     const resumeText = typeof resume === "string" ? resume.trim() : ""
     console.log("[v0] Received", messages?.length ?? 0, "messages")
     console.log("[v0] Resume present:", !!resumeText, "length:", resumeText.length)
+    console.log("[v0] Preferences - Location:", location, "Remote:", isRemote)
 
     // Hard cap: max 3 jobs per batch (matches Tavily max_results).
     const KANBAN_LIMIT = 3
@@ -152,7 +153,7 @@ export async function POST(req: Request) {
         inputSchema: z.object({
           query: z
             .string()
-            .describe("Search query for jobs (e.g., 'senior react developer remote jobs')"),
+            .describe("Search query for jobs (e.g., 'Junior React frontend remote jobs in Sri Lanka')"),
         }),
         execute: async ({ query }) => {
           return await searchJobsWithTavily(query)
@@ -201,18 +202,26 @@ ${
 ${resumeText}
 === END RESUME ===
 
-CRITICAL: You MUST use the resume above as the absolute GROUND TRUTH. Extract the user's core skills, frameworks, experience level, and preferred roles. Your job search MUST heavily rely on these details.`
+CRITICAL: You MUST use the resume above as the absolute GROUND TRUTH. Extract the user's core skills, frameworks, and crucially, their YEARS OF EXPERIENCE (YoE). If they are entry-level/junior, you MUST NOT search for senior roles.`
     : "NOTE: The user has not provided a resume yet. Suggest they add one for better matches."
 }
 
+User Preferences:
+- Location: ${location || "Not specified (assume global/any unless remote is selected)"}
+- Remote Only: ${isRemote ? "YES (You MUST include 'remote' in the search query)" : "NO"}
+
 WORKFLOW (Sequential steps):
-STEP 1. Analyze the user's resume/message and call the \`search_jobs\` tool with a highly targeted query (e.g., "Senior React TypeScript frontend remote jobs"). DO NOT call any other tool yet.
+STEP 1. Analyze the user's resume/message and call the \`search_jobs\` tool. Your query MUST be highly specific:
+        - Include the exact level (e.g., "Junior", "Entry Level", "Intern", "Mid-level") based on the resume. DO NOT search for senior jobs if the resume is junior.
+        - Include the location if specified (e.g., "in Sri Lanka").
+        - Include "remote" if Remote Only is YES.
+        - Example query: "Junior React Developer remote jobs in Sri Lanka"
 STEP 2. Wait for the \`search_jobs\` results.
 STEP 3. Call \`add_jobs_batch\` with an array of up to 3 specific job postings based strictly on the actual search results. ONLY select direct job listings. IGNORE generic job search results or aggregators. Do NOT make up jobs.
 STEP 4. After \`add_jobs_batch\` completes, stop and reply to the user.
 
 For EACH job in the add_jobs_batch array:
-- Compute matchPercentage HONESTLY based on how well the job requirements match the user's resume skills.
+- Compute matchPercentage HONESTLY based on how well the job requirements match the user's resume skills AND experience level. If a job requires 5+ years and the user has 1, score it very low (e.g. 10-20%).
 - Populate missingSkills with specific skills required by the job but missing from the resume.
 - Include a 2-4 sentence description summarizing the role based on the search result.
 - Use the exact URL from the search results.
