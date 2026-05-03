@@ -2,25 +2,19 @@ import { streamText, tool, convertToModelMessages } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { z } from "zod"
 
-console.log("[v0] Checking environment variables...")
-console.log("[v0] gemini_key present:", !!process.env.gemini_key)
-console.log("[v0] GOOGLE_GENERATIVE_AI_API_KEY present:", !!process.env.GOOGLE_GENERATIVE_AI_API_KEY)
-
-const apiKey = process.env.gemini_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY
-console.log("[v0] Using API key:", apiKey ? "✓ Found" : "✗ Missing")
+if (!process.env.gemini_key) {
+  throw new Error("Missing GOOGLE_GENERATIVE_AI_API_KEY environment variable")
+}
 
 const google = createGoogleGenerativeAI({
-  apiKey: apiKey,
+  apiKey: process.env.gemini_key,
 })
 
 export const maxDuration = 30
 
 export async function POST(req: Request) {
-  console.log("[v0] POST /api/chat called")
-
   try {
     const { messages } = await req.json()
-    console.log("[v0] Received messages:", JSON.stringify(messages, null, 2))
 
     const result = streamText({
       model: google("gemini-1.5-flash"),
@@ -49,7 +43,6 @@ export async function POST(req: Request) {
       },
     })
 
-    console.log("[v0] streamText called successfully")
     return result.toUIMessageStreamResponse()
   } catch (error) {
     console.error("[v0] API error:", error)
