@@ -338,6 +338,13 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
           // the Kanban board already shows the result visually.
           if (msg.role === "assistant") {
             const text = getMessageText(msg.parts as any).trim()
+            const toolParts = (msg.parts ?? []).filter((p: any) => p.type === "tool-invocation")
+
+            // Hide completely empty assistant messages to prevent blank bubbles
+            if (text.length === 0 && toolParts.length === 0) {
+              return null
+            }
+
             if (text.length > 0 && text.length < 80 && /done|added|board/i.test(text)) {
               return null
             }
@@ -374,8 +381,8 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
         {/* Search Preferences */}
         <div className="flex items-center gap-3 px-1 text-sm text-muted-foreground">
           <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               className="rounded border-border bg-background"
               checked={isRemote}
               onChange={(e) => setIsRemote(e.target.checked)}

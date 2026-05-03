@@ -50,7 +50,7 @@ async function searchJobsWithTavily(query: string): Promise<string> {
     return "Tavily Search API key not configured. Please add TAVILY_API_KEY to your environment variables."
   }
 
-    try {
+  try {
     // 10 second timeout so the agent never hangs forever
     const response = await fetch("https://api.tavily.com/search", {
       method: "POST",
@@ -194,17 +194,16 @@ export async function POST(req: Request) {
       withRetry(async () =>
         streamText({
           model: google("gemini-3.1-flash-lite-preview"),
-      system: `You are an elite Career Strategist AI assistant helping users find highly relevant job opportunities.
+          system: `You are an elite Career Strategist AI assistant helping users find highly relevant job opportunities.
 
-${
-  resumeText
-    ? `=== USER RESUME ===
+${resumeText
+              ? `=== USER RESUME ===
 ${resumeText}
 === END RESUME ===
 
 CRITICAL: You MUST use the resume above as the absolute GROUND TRUTH. Extract the user's core skills, frameworks, and crucially, their YEARS OF EXPERIENCE (YoE). If they are entry-level/junior, you MUST NOT search for senior roles.`
-    : "NOTE: The user has not provided a resume yet. Suggest they add one for better matches."
-}
+              : "NOTE: The user has not provided a resume yet. Suggest they add one for better matches."
+            }
 
 User Preferences:
 - Location: ${location || "Not specified (assume global/any unless remote is selected)"}
@@ -230,18 +229,18 @@ STRICT RULES:
 - DO NOT call \`add_jobs_batch\` until you have the results from \`search_jobs\`. (No parallel tool calling).
 - NEVER hallucinate jobs.
 - Match scoring MUST reflect the actual resume.`,
-      messages: await convertToModelMessages(messages),
-      // Hard ceiling: 1 search_jobs + 1 add_jobs_batch = 2 tool steps, stop after.
-      stopWhen: stepCountIs(3),
-      tools: toolset,
-      onStepFinish: ({ toolCalls, finishReason }) => {
-        console.log(
-          "[v0] step finished — reason:",
-          finishReason,
-          "toolCalls:",
-          toolCalls?.map((t) => t.toolName),
-        )
-      },
+          messages: await convertToModelMessages(messages),
+          // Hard ceiling: 1 search_jobs + 1 add_jobs_batch = 2 tool steps, stop after.
+          stopWhen: stepCountIs(3),
+          tools: toolset,
+          onStepFinish: ({ toolCalls, finishReason }) => {
+            console.log(
+              "[v0] step finished — reason:",
+              finishReason,
+              "toolCalls:",
+              toolCalls?.map((t) => t.toolName),
+            )
+          },
         })
       )
     )
