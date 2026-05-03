@@ -32,7 +32,8 @@ export default function Page() {
       matchPercent: args.matchPercentage,
       missingSkills: args.missingSkills,
       column: "discovered", // New jobs always go to Discovered
-      location: args.link, // Using link as location for now; could parse or add separate field
+      link: args.link,
+      description: args.description ?? "",
     }
     setJobs((prev) => [newJob, ...prev])
   }
@@ -74,7 +75,7 @@ export default function Page() {
 
         {/* Right Column: Skill Gap + Kanban */}
         <section className="flex flex-col gap-3 p-4 overflow-hidden min-h-0">
-          <SkillGapWidget />
+          <SkillGapWidget jobs={jobs} />
           <KanbanBoard jobs={jobs} setJobs={setJobs} />
         </section>
       </main>

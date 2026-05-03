@@ -144,6 +144,7 @@ export interface AddToKanbanArgs {
   title: string
   company: string
   link: string
+  description?: string
   matchPercentage: number
   missingSkills: string[]
 }

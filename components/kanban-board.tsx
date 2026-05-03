@@ -1,7 +1,16 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronLeft, ChevronRight, Briefcase, Building2, Layers3 } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Briefcase,
+  Building2,
+  Layers3,
+  ChevronDown,
+  ExternalLink,
+  X,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -17,11 +26,12 @@ export type JobCard = {
   matchPercent: number
   missingSkills: string[]
   column: KanbanColumn
-  location: string
+  link: string
+  description: string
 }
 
 // --------------------------------------------------------------------------
-// Mock data — replace with cards produced by your AI agent's add_to_kanban tool
+// Default seed data — will be overwritten by the AI agent's add_to_kanban tool
 // --------------------------------------------------------------------------
 const DEFAULT_JOBS: JobCard[] = [
   {
@@ -31,7 +41,9 @@ const DEFAULT_JOBS: JobCard[] = [
     matchPercent: 88,
     missingSkills: ["GraphQL", "Rust"],
     column: "discovered",
-    location: "Remote",
+    link: "https://vercel.com/careers",
+    description:
+      "Build the future of the web at Vercel. Work on Next.js, the Vercel platform, and tools used by millions of developers worldwide.",
   },
   {
     id: "job-2",
@@ -40,7 +52,9 @@ const DEFAULT_JOBS: JobCard[] = [
     matchPercent: 74,
     missingSkills: ["Docker", "GraphQL", "Go"],
     column: "best_matches",
-    location: "San Francisco, CA",
+    link: "https://linear.app/careers",
+    description:
+      "Help us build the issue tracker that engineering teams love. You'll work on complex React applications with a focus on performance and design.",
   },
   {
     id: "job-3",
@@ -49,7 +63,9 @@ const DEFAULT_JOBS: JobCard[] = [
     matchPercent: 92,
     missingSkills: ["WebAssembly"],
     column: "applied",
-    location: "New York, NY",
+    link: "https://figma.com/careers",
+    description:
+      "Lead the architecture of Figma's web client. You'll work on rendering performance, real-time collaboration, and developer tooling.",
   },
 ]
 
@@ -73,10 +89,13 @@ function matchColor(pct: number) {
 function JobCardItem({
   job,
   onMove,
+  onRemove,
 }: {
   job: JobCard
   onMove: (id: string, direction: "prev" | "next") => void
+  onRemove: (id: string) => void
 }) {
+  const [expanded, setExpanded] = useState(false)
   const currentIdx = COLUMN_ORDER.indexOf(job.column)
   const canMovePrev = currentIdx > 0
   const canMoveNext = currentIdx < COLUMN_ORDER.length - 1
@@ -85,18 +104,40 @@ function JobCardItem({
     <div className="rounded-lg border border-border bg-secondary/40 p-3 flex flex-col gap-2.5 hover:border-primary/40 hover:bg-secondary/70 transition-colors group">
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <span className="text-sm font-semibold text-foreground leading-tight truncate">{job.title}</span>
-          <span className="text-xs text-muted-foreground truncate">{job.company} · {job.location}</span>
-        </div>
-        <span
-          className={cn(
-            "shrink-0 text-xs font-bold px-2 py-0.5 rounded-full border font-mono",
-            matchColor(job.matchPercent)
-          )}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex flex-col gap-0.5 min-w-0 text-left flex-1 hover:opacity-90"
+          aria-expanded={expanded}
         >
-          {job.matchPercent}%
-        </span>
+          <span className="text-sm font-semibold text-foreground leading-tight truncate">
+            {job.title}
+          </span>
+          <span className="text-xs text-muted-foreground truncate">{job.company}</span>
+        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className={cn(
+              "text-xs font-bold px-2 py-0.5 rounded-full border font-mono",
+              matchColor(job.matchPercent)
+            )}
+          >
+            {job.matchPercent}%
+          </span>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={expanded ? "Collapse" : "Expand"}
+          >
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 transition-transform duration-200",
+                expanded && "rotate-180"
+              )}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Missing Skills */}
@@ -113,7 +154,33 @@ function JobCardItem({
         </div>
       )}
 
-      {/* Move buttons */}
+      {/* Expanded details */}
+      {expanded && (
+        <div className="flex flex-col gap-2.5 pt-2 border-t border-border/60">
+          {job.description ? (
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {job.description}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground/60 italic">
+              No description provided.
+            </p>
+          )}
+          {job.link && (
+            <a
+              href={job.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline w-fit"
+            >
+              <ExternalLink className="w-3 h-3" />
+              View posting
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Move + remove buttons */}
       <div className="flex items-center gap-1.5 pt-0.5">
         <Button
           variant="outline"
@@ -138,6 +205,15 @@ function JobCardItem({
         <span className="ml-auto text-[10px] text-muted-foreground font-mono capitalize">
           {COLUMNS.find((c) => c.id === job.column)?.label}
         </span>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-6 w-6 border-border bg-transparent hover:bg-destructive/20 hover:border-destructive/40 text-muted-foreground hover:text-destructive"
+          onClick={() => onRemove(job.id)}
+          aria-label="Remove job"
+        >
+          <X className="w-3.5 h-3.5" />
+        </Button>
       </div>
     </div>
   )
@@ -169,7 +245,14 @@ export function getInitialJobs(): JobCard[] {
   if (typeof window === "undefined") return DEFAULT_JOBS
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? (JSON.parse(stored) as JobCard[]) : DEFAULT_JOBS
+    if (!stored) return DEFAULT_JOBS
+    const parsed = JSON.parse(stored) as JobCard[]
+    // Backfill new fields for older cached entries that may be missing them
+    return parsed.map((job) => ({
+      ...job,
+      link: job.link ?? "",
+      description: job.description ?? "",
+    }))
   } catch {
     return DEFAULT_JOBS
   }
@@ -202,6 +285,10 @@ export function KanbanBoard({ jobs, setJobs }: KanbanBoardProps) {
     )
   }
 
+  const handleRemove = (id: string) => {
+    setJobs((prev) => prev.filter((job) => job.id !== id))
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 flex-1 min-h-0">
       <div className="flex items-center gap-2 shrink-0">
@@ -228,7 +315,12 @@ export function KanbanBoard({ jobs, setJobs }: KanbanBoardProps) {
                   <p className="text-center text-[11px] text-muted-foreground/50 mt-4">Empty</p>
                 ) : (
                   colJobs.map((job) => (
-                    <JobCardItem key={job.id} job={job} onMove={handleMove} />
+                    <JobCardItem
+                      key={job.id}
+                      job={job}
+                      onMove={handleMove}
+                      onRemove={handleRemove}
+                    />
                   ))
                 )}
               </div>

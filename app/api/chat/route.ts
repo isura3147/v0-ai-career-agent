@@ -137,6 +137,11 @@ export async function POST(req: Request) {
           title: z.string().describe("The job title"),
           company: z.string().describe("The company name"),
           link: z.string().describe("URL to the job posting"),
+          description: z
+            .string()
+            .describe(
+              "A 2-4 sentence summary of the role, key responsibilities, and required skills. Pulled from the search result content."
+            ),
           matchPercentage: z
             .number()
             .describe("How well the job matches the user's skills (0-100)"),
@@ -171,6 +176,8 @@ WORKFLOW:
    - 50-69 = partial match (some core skills missing).
    - Below 50 = poor match (don't add it — search again with a better query).
 4. Populate missingSkills with the SPECIFIC skills the job requires that are NOT in the user's resume.
+   - ALWAYS include the description field with a 2-4 sentence summary of the role and its key requirements, derived from the search result content.
+   - ALWAYS pass through the real link from the search result — never fabricate URLs.
 5. Then RESPOND WITH A TEXT MESSAGE describing:
    - Why this job is a good fit (cite resume strengths).
    - Which skills are missing and how to bridge the gap.
