@@ -1,6 +1,11 @@
 import { streamText, tool, convertToModelMessages } from "ai"
-import { google } from "@ai-sdk/google"
+import { createOpenAI } from "@ai-sdk/openai"
 import { z } from "zod"
+
+const groq = createOpenAI({
+  baseURL: "https://api.groq.com/openai/v1",
+  apiKey: process.env.groq_key || "",
+})
 
 export const maxDuration = 30
 
@@ -9,7 +14,7 @@ export async function POST(req: Request) {
     const { messages } = await req.json()
 
     const result = streamText({
-      model: google("gemini-2.0-flash"),
+      model: groq("llama-3.3-70b-versatile"),
       system:
         "You are an autonomous Career Strategist. Extract skills, search for jobs, and save matches using your tools.",
       messages: await convertToModelMessages(messages),
