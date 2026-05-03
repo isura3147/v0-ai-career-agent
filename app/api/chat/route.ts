@@ -146,7 +146,7 @@ export async function POST(req: Request) {
     }
 
     const result = streamText({
-      model: cerebras("llama3.1-8b"),
+      model: cerebras("qwen-3-235b-a22b-instruct-2507"),
       system: `You are a Career Strategist AI assistant helping users find real job opportunities.
 
 WORKFLOW:
