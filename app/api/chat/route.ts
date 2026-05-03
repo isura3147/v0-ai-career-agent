@@ -2,8 +2,15 @@ import { streamText, tool, convertToModelMessages } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { z } from "zod"
 
+console.log("[v0] Checking environment variables...")
+console.log("[v0] gemini_key present:", !!process.env.gemini_key)
+console.log("[v0] GOOGLE_GENERATIVE_AI_API_KEY present:", !!process.env.GOOGLE_GENERATIVE_AI_API_KEY)
+
+const apiKey = process.env.gemini_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY
+console.log("[v0] Using API key:", apiKey ? "✓ Found" : "✗ Missing")
+
 const google = createGoogleGenerativeAI({
-  apiKey: process.env.gemini_key,
+  apiKey: apiKey,
 })
 
 export const maxDuration = 30
