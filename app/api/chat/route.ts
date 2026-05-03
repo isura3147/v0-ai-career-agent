@@ -2,21 +2,30 @@ import { streamText, tool, convertToModelMessages } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { z } from "zod"
 
-const google = createGoogleGenerativeAI({
-  apiKey: process.env.gemini_key || "",
-})
-
-// Brave Search API key for future MCP integration
-const braveSearchKey = process.env.brave_search || ""
-
 export const maxDuration = 30
 
 export async function POST(req: Request) {
   try {
+    // Read API key at request time to pick up hot-reloaded env vars
+    const apiKey = process.env.gemini_key
+    const braveSearchKey = process.env.brave_search || ""
+    
+    if (!apiKey) {
+      console.error("[v0] gemini_key is not set. Available env vars:", Object.keys(process.env).slice(0, 20))
+      return new Response(
+        JSON.stringify({ 
+          error: "gemini_key environment variable is not configured. Please add it in Settings > Vars and restart the preview." 
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      )
+    }
+
+    const google = createGoogleGenerativeAI({ apiKey })
+    
     const { messages } = await req.json()
 
     const result = streamText({
-      model: google("gemini-3-flash"),
+      model: google("gemini-2.0-flash"),
       system:
         "You are an autonomous Career Strategist. Extract skills, search for jobs, and save matches using your tools.",
       messages: await convertToModelMessages(messages),
