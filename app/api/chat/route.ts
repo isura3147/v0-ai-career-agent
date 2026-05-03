@@ -1,57 +1,53 @@
 import { streamText, tool, convertToModelMessages, stepCountIs } from "ai"
-import { createOpenAI } from "@ai-sdk/openai"
+import { createCerebras } from "@ai-sdk/cerebras"
 import { z } from "zod"
 
-const groq = createOpenAI({
-  baseURL: "https://api.groq.com/openai/v1",
-  apiKey: process.env.groq_key || "",
+const cerebras = createCerebras({
+  apiKey: process.env.CEREBRAS_API_KEY || "",
 })
 
 export const maxDuration = 30
 
 // --------------------------------------------------------------------------
-// Brave Search helper — uses GET with URL params and a fetch timeout
+// Tavily Search helper — free tier, 1,000 searches/month, designed for AI agents
 // --------------------------------------------------------------------------
-async function searchJobsWithBrave(query: string): Promise<string> {
-  const braveSearchKey = process.env.brave_search || ""
+async function searchJobsWithTavily(query: string): Promise<string> {
+  const tavilyKey = process.env.TAVILY_API_KEY || ""
 
-  console.log("[v0] searchJobsWithBrave called with query:", query)
-  console.log("[v0] Brave API key present:", !!braveSearchKey)
+  console.log("[v0] searchJobsWithTavily called with query:", query)
+  console.log("[v0] Tavily API key present:", !!tavilyKey)
 
-  if (!braveSearchKey) {
-    return "Brave Search API key not configured. Please add brave_search to your environment variables."
+  if (!tavilyKey) {
+    return "Tavily Search API key not configured. Please add TAVILY_API_KEY to your environment variables."
   }
-
-  // Build URL with query params
-  const url = new URL("https://api.search.brave.com/res/v1/web/search")
-  url.searchParams.set("q", query)
-  url.searchParams.set("count", "5")
-
-  console.log("[v0] Brave Search URL:", url.toString())
 
   try {
     // 10 second timeout so the agent never hangs forever
-    const response = await fetch(url.toString(), {
-      method: "GET",
+    const response = await fetch("https://api.tavily.com/search", {
+      method: "POST",
       headers: {
-        Accept: "application/json",
-        "Accept-Encoding": "gzip",
-        "X-Subscription-Token": braveSearchKey,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        api_key: tavilyKey,
+        query: query,
+        max_results: 5,
+        include_answer: false,
+      }),
       signal: AbortSignal.timeout(10_000),
     })
 
-    console.log("[v0] Brave Search response status:", response.status)
+    console.log("[v0] Tavily Search response status:", response.status)
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error("[v0] Brave Search error body:", errorText)
+      console.error("[v0] Tavily Search error body:", errorText)
       return `Search failed (${response.status}): ${errorText.slice(0, 200)}`
     }
 
     const data = await response.json()
-    const rawResults = data?.web?.results ?? []
-    console.log("[v0] Brave Search returned", rawResults.length, "results")
+    const rawResults = data?.results ?? []
+    console.log("[v0] Tavily Search returned", rawResults.length, "results")
 
     if (rawResults.length === 0) {
       return "No results found. Try a more specific search query."
@@ -60,14 +56,14 @@ async function searchJobsWithBrave(query: string): Promise<string> {
     const results = rawResults.slice(0, 5).map((r: any) => ({
       title: r.title,
       url: r.url,
-      description: r.description,
+      description: r.content || r.snippet || "",
     }))
 
     return JSON.stringify(results, null, 2)
   } catch (error) {
-    console.error("[v0] Brave Search exception:", error)
+    console.error("[v0] Tavily Search exception:", error)
     if (error instanceof Error && error.name === "TimeoutError") {
-      return "Search timed out after 10 seconds. The Brave Search API may be slow."
+      return "Search timed out after 10 seconds. The Tavily Search API may be slow."
     }
     return `Error searching jobs: ${error instanceof Error ? error.message : "Unknown error"}`
   }
@@ -96,7 +92,8 @@ function countKanbanCalls(messages: any[]): number {
 
 export async function POST(req: Request) {
   console.log("[v0] POST /api/chat — start")
-  console.log("[v0] groq_key present:", !!process.env.groq_key)
+  console.log("[v0] CEREBRAS_API_KEY present:", !!process.env.CEREBRAS_API_KEY)
+  console.log("[v0] TAVILY_API_KEY present:", !!process.env.TAVILY_API_KEY)
 
   try {
     const { messages } = await req.json()
@@ -118,14 +115,14 @@ export async function POST(req: Request) {
     const toolset: Record<string, any> = {
       search_jobs: tool({
         description:
-          "Search for real job opportunities using Brave Search. Returns actual job listings from the web.",
+          "Search for real job opportunities using Tavily Search. Returns actual job listings from the web.",
         inputSchema: z.object({
           query: z
             .string()
             .describe("Search query for jobs (e.g., 'senior react developer remote jobs')"),
         }),
         execute: async ({ query }) => {
-          return await searchJobsWithBrave(query)
+          return await searchJobsWithTavily(query)
         },
       }),
     }
@@ -149,7 +146,7 @@ export async function POST(req: Request) {
     }
 
     const result = streamText({
-      model: groq("llama-3.3-70b-versatile"),
+      model: cerebras("llama-3.3-70b"),
       system: `You are a Career Strategist AI assistant helping users find real job opportunities.
 
 WORKFLOW:
