@@ -185,7 +185,7 @@ export async function POST(req: Request) {
 
     // Queue and retry the LLM call to reduce rate limit errors
     const result = await llmQueue.add(() =>
-      withRetry(() =>
+      withRetry(async () =>
         streamText({
           model: cerebras("qwen-3-235b-a22b-instruct-2507"),
       system: `You are a Career Strategist AI assistant helping users find real job opportunities tailored to their background.
