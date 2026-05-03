@@ -70,11 +70,11 @@ async function searchJobsWithTavily(query: string): Promise<string> {
 }
 
 // --------------------------------------------------------------------------
-// Count how many add_to_kanban calls already exist in the message history.
-// Used to enforce a hard cap and prevent runaway tool-calling loops.
+// Detect whether the assistant has already batched jobs onto the board in
+// this conversation turn. Used to enforce a hard cap and prevent runaway
+// tool-calling loops.
 // --------------------------------------------------------------------------
-function countKanbanCalls(messages: any[]): number {
-  let count = 0
+function hasBatchedJobs(messages: any[]): boolean {
   for (const msg of messages ?? []) {
     const parts = msg.parts ?? []
     for (const part of parts) {
@@ -82,12 +82,12 @@ function countKanbanCalls(messages: any[]): number {
         part.toolName ??
         part.toolInvocation?.toolName ??
         (part.type?.startsWith("tool-") ? part.type.replace(/^tool-/, "") : undefined)
-      if (toolName === "add_to_kanban") {
-        count++
+      if (toolName === "add_jobs_batch") {
+        return true
       }
     }
   }
-  return count
+  return false
 }
 
 export async function POST(req: Request) {
@@ -101,19 +101,14 @@ export async function POST(req: Request) {
     console.log("[v0] Received", messages?.length ?? 0, "messages")
     console.log("[v0] Resume present:", !!resumeText, "length:", resumeText.length)
 
-    const kanbanCount = countKanbanCalls(messages)
-    console.log("[v0] add_to_kanban calls already in history:", kanbanCount)
+    const alreadyBatched = hasBatchedJobs(messages)
+    console.log("[v0] already batched jobs this turn:", alreadyBatched)
 
-    // Hard cap: max 5 jobs per conversation turn (matches Tavily max_results)
+    // Hard cap: max 5 jobs per batch (matches Tavily max_results).
     const KANBAN_LIMIT = 5
-    const kanbanLimitReached = kanbanCount >= KANBAN_LIMIT
 
-    if (kanbanLimitReached) {
-      console.log("[v0] Kanban limit reached — removing add_to_kanban tool")
-    }
-
-    // Build tools dynamically — drop add_to_kanban once the user already
-    // has enough jobs in this turn.
+    // Build tools dynamically — drop add_jobs_batch once the user already
+    // got their batch this turn so the model can't loop back into adding more.
     const toolset: Record<string, any> = {
       search_jobs: tool({
         description:
@@ -129,25 +124,34 @@ export async function POST(req: Request) {
       }),
     }
 
-    if (!kanbanLimitReached) {
-      toolset.add_to_kanban = tool({
-        description:
-          "Add a job opportunity to the user's Kanban board in the Discovered column. Call this ONCE PER JOB you want to add — typically once for each result returned by search_jobs.",
+    if (!alreadyBatched) {
+      const jobSchema = z.object({
+        title: z.string().describe("The job title"),
+        company: z.string().describe("The company name"),
+        link: z.string().describe("URL to the job posting"),
+        description: z
+          .string()
+          .describe(
+            "A 2-4 sentence summary of the role, key responsibilities, and required skills. Pulled from the search result content."
+          ),
+        matchPercentage: z
+          .number()
+          .describe("How well the job matches the user's skills (0-100)"),
+        missingSkills: z
+          .array(z.string())
+          .describe("Skills the user is missing for this role"),
+      })
+
+      toolset.add_jobs_batch = tool({
+        description: `Add ALL relevant job opportunities from the search results to the user's Kanban board in a SINGLE call. Pass an array of jobs (typically one per search result, up to ${KANBAN_LIMIT}). Call this tool EXACTLY ONCE per user request — never call it more than once.`,
         inputSchema: z.object({
-          title: z.string().describe("The job title"),
-          company: z.string().describe("The company name"),
-          link: z.string().describe("URL to the job posting"),
-          description: z
-            .string()
+          jobs: z
+            .array(jobSchema)
+            .min(1)
+            .max(KANBAN_LIMIT)
             .describe(
-              "A 2-4 sentence summary of the role, key responsibilities, and required skills. Pulled from the search result content."
+              `Array of jobs to add to the board, scored against the user's resume. Include up to ${KANBAN_LIMIT} jobs.`
             ),
-          matchPercentage: z
-            .number()
-            .describe("How well the job matches the user's skills (0-100)"),
-          missingSkills: z
-            .array(z.string())
-            .describe("Skills the user is missing for this role"),
         }),
       })
     }
@@ -166,35 +170,31 @@ Use the resume above as the GROUND TRUTH for the user's skills, experience, and 
     : "NOTE: The user has not provided a resume yet. If they ask for jobs without a resume, still help them, but mention they should add their resume to the panel for better-tailored matches."
 }
 
-WORKFLOW:
-1. When the user asks for jobs, FIRST call search_jobs ONCE with a query that reflects their resume (e.g., if their resume says "5 years React + Node", search "senior react node developer remote jobs").
-2. For EACH result returned by search_jobs (up to ${KANBAN_LIMIT}), call add_to_kanban — one call per job. Add ALL of the search results as separate Kanban cards so the user can review them.
-3. For each add_to_kanban call, compute matchPercentage HONESTLY against the resume:
+WORKFLOW (exactly 3 steps — do not deviate):
+1. Call search_jobs ONCE with a query that reflects the user's resume (e.g., if the resume says "5 years React + Node", search "senior react node developer remote jobs").
+2. Call add_jobs_batch ONCE with an array of jobs — include ONE entry per search result (up to ${KANBAN_LIMIT}). Do NOT make a separate tool call per job.
+3. Respond with a SINGLE text message summarizing how many jobs you added, which 1-2 are the strongest matches and why, and the common skill gaps across the listings. Do NOT call any more tools.
+
+For EACH job in the add_jobs_batch array:
+- Compute matchPercentage HONESTLY against the resume:
    - 90-100 = strong match (most required skills present, right experience level).
    - 70-89 = good match (many skills overlap, minor gaps).
    - 50-69 = partial match (some core skills missing).
-   - Below 50 = weak match — still add it but score it low.
-4. For each job:
-   - Populate missingSkills with the SPECIFIC skills the job requires that are NOT in the user's resume.
-   - ALWAYS include the description field with a 2-4 sentence summary of the role, derived from the search result content.
-   - ALWAYS pass through the real link from the search result — never fabricate URLs.
-5. AFTER all add_to_kanban calls are done, RESPOND WITH A SINGLE TEXT MESSAGE summarizing:
-   - How many jobs you added.
-   - Which 1-2 are the strongest matches and why.
-   - Common skill gaps across the listings.
-   Do NOT call any more tools after the summary.
+   - Below 50 = weak match — still include it but score it low.
+- Populate missingSkills with the SPECIFIC skills the job requires that are NOT in the user's resume.
+- Include the description field with a 2-4 sentence summary of the role, derived from the search result content.
+- Pass through the real link from the search result — never fabricate URLs.
 
 STRICT RULES:
-- Call search_jobs ONCE, then make multiple add_to_kanban calls in sequence.
+- Call search_jobs ONCE, then add_jobs_batch ONCE, then respond with text. No other patterns.
 - NEVER hallucinate jobs — only use real search results.
-- Call add_to_kanban AT MOST ${KANBAN_LIMIT} times per user request.
+- NEVER call add_jobs_batch more than once per user request.
 - Match scoring MUST reflect the actual resume, not generic estimates.
-- After all add_to_kanban calls, your next output MUST be plain text — no more tool calls.
-- ${kanbanLimitReached ? "The user has reached the maximum jobs for this turn. Respond with text only." : ""}`,
+- ${alreadyBatched ? "The user already has their job batch this turn. Respond with text only — do NOT call any tools." : ""}`,
       messages: await convertToModelMessages(messages),
       // Hard ceiling on server-side step loop:
-      // 1 search_jobs + up to 5 add_to_kanban + 1 final summary = 7, give a small buffer.
-      stopWhen: stepCountIs(8),
+      // 1 search_jobs + 1 add_jobs_batch + 1 final summary = 3, with a small buffer.
+      stopWhen: stepCountIs(4),
       tools: toolset,
       onStepFinish: ({ toolCalls, finishReason }) => {
         console.log(

@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils"
 // --------------------------------------------------------------------------
 function ToolPill({ toolName, state }: { toolName: string; state: string }) {
   const icons: Record<string, string> = {
-    brave_web_search: "🔍",
+    search_jobs: "🔍",
+    add_jobs_batch: "✨",
     add_to_kanban: "✨",
     analyze_skills: "🧠",
     fetch_job_details: "📄",
@@ -231,17 +232,18 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall({ toolCall }) {
       console.log("[v0] onToolCall fired:", toolCall.toolName, toolCall)
-      // Handle client-side tool execution for add_to_kanban
-      if (toolCall.toolName === "add_to_kanban") {
-        const args = toolCall.input as AddToKanbanArgs
-        console.log("[v0] Adding job to kanban:", args.title, "@", args.company)
-        // Add the job to Kanban board
-        onAddJob?.(args)
-        // Provide tool output back to the model
+      // Handle client-side tool execution for add_jobs_batch (single batched call).
+      if (toolCall.toolName === "add_jobs_batch") {
+        const input = toolCall.input as { jobs?: AddToKanbanArgs[] }
+        const jobs = Array.isArray(input?.jobs) ? input.jobs : []
+        console.log("[v0] Adding", jobs.length, "jobs to kanban")
+        for (const job of jobs) {
+          onAddJob?.(job)
+        }
         addToolOutput({
-          tool: "add_to_kanban",
+          tool: "add_jobs_batch",
           toolCallId: toolCall.toolCallId,
-          output: { success: true, job: args },
+          output: { success: true, count: jobs.length },
         })
       }
     },
