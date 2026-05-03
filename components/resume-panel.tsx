@@ -26,27 +26,32 @@ export function ResumePanel({ resume, setResume }: ResumePanelProps) {
   const hasResume = resume.trim().length > 0
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3">
+    <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 shadow-sm">
+      {/* Header */}
       <div className="flex items-center gap-2">
         <FileText className="w-4 h-4 text-primary" />
-        <span className="text-sm font-semibold text-foreground tracking-wide uppercase">Resume Summary</span>
+        <span className="text-sm font-semibold text-foreground">Resume Summary</span>
         {hasResume && (
-          <span className="ml-auto flex items-center gap-1 text-[10px] font-mono text-chart-2">
-            <CheckCircle2 className="w-3 h-3" />
+          <span className="ml-auto flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+            <CheckCircle2 className="w-3.5 h-3.5" />
             Active
           </span>
         )}
       </div>
+
+      {/* Textarea */}
       <Textarea
         placeholder="Paste a summary of your resume here — skills, experience level, tech stack, and the roles you are targeting. The agent will use this to find and score relevant jobs for you."
-        className="min-h-[160px] resize-none bg-input border-border text-foreground placeholder:text-muted-foreground text-sm leading-relaxed focus-visible:ring-primary"
+        className="min-h-[160px] resize-none text-sm leading-relaxed"
         value={resume}
         onChange={(e) => setResume(e.target.value)}
       />
+
+      {/* Save button */}
       <Button
         onClick={handleSave}
         size="sm"
-        className="self-end bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+        className="self-end"
       >
         <Save className="w-4 h-4 mr-2" />
         {saved ? "Saved!" : "Save Resume"}

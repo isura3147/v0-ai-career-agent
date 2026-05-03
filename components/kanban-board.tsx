@@ -65,10 +65,10 @@ const COLUMNS: { id: KanbanColumn; label: string; icon: React.ReactNode }[] = [
 
 const COLUMN_ORDER: KanbanColumn[] = ["discovered", "applied"]
 
-function matchBadgeStyle(pct: number) {
-  if (pct >= 85) return "text-chart-2 bg-chart-2/10 border-chart-2/30"
-  if (pct >= 70) return "text-chart-3 bg-chart-3/10 border-chart-3/30"
-  return "text-chart-5 bg-chart-5/10 border-chart-5/30"
+function matchBadgeClass(pct: number) {
+  if (pct >= 85) return "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950 dark:border-emerald-800"
+  if (pct >= 70) return "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950 dark:border-amber-800"
+  return "text-rose-700 bg-rose-50 border-rose-200 dark:text-rose-400 dark:bg-rose-950 dark:border-rose-800"
 }
 
 // --------------------------------------------------------------------------
@@ -89,21 +89,21 @@ function JobCardItem({
   const canMoveNext = currentIdx < COLUMN_ORDER.length - 1
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 hover:border-primary/40 transition-colors">
+    <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 shadow-sm hover:shadow-md hover:border-primary/50 transition-all duration-150">
 
       {/* Title row */}
       <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1 min-w-0 flex-1">
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
           <span className="text-base font-semibold text-foreground leading-snug">
             {job.title}
           </span>
           <span className="text-sm text-muted-foreground">{job.company}</span>
         </div>
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
+        <div className="flex flex-col items-end gap-2 shrink-0">
           <span
             className={cn(
-              "text-sm font-bold px-2.5 py-1 rounded-full border font-mono",
-              matchBadgeStyle(job.matchPercent)
+              "text-xs font-bold px-2.5 py-1 rounded-full border font-mono",
+              matchBadgeClass(job.matchPercent)
             )}
           >
             {job.matchPercent}% match
@@ -111,7 +111,7 @@ function JobCardItem({
           <button
             type="button"
             onClick={() => onRemove(job.id)}
-            className="text-muted-foreground/40 hover:text-destructive transition-colors"
+            className="text-muted-foreground/50 hover:text-destructive transition-colors"
             aria-label="Remove job"
           >
             <X className="w-3.5 h-3.5" />
@@ -125,7 +125,7 @@ function JobCardItem({
           href={job.link}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline w-fit"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline underline-offset-2 w-fit"
         >
           <ExternalLink className="w-3.5 h-3.5 shrink-0" />
           View job posting
@@ -142,7 +142,7 @@ function JobCardItem({
             {job.missingSkills.map((skill) => (
               <span
                 key={skill}
-                className="text-xs font-mono px-2 py-0.5 rounded-md bg-muted border border-border text-muted-foreground"
+                className="text-xs font-mono px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border"
               >
                 {skill}
               </span>
@@ -157,7 +157,7 @@ function JobCardItem({
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors w-fit"
+            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors w-fit select-none"
             aria-expanded={expanded}
           >
             <ChevronDown
@@ -169,7 +169,7 @@ function JobCardItem({
             {expanded ? "Hide description" : "Show description"}
           </button>
           {expanded && (
-            <p className="text-sm text-muted-foreground leading-relaxed border-t border-border/50 pt-2">
+            <p className="text-sm text-muted-foreground leading-relaxed border-t border-border pt-2">
               {job.description}
             </p>
           )}
@@ -177,11 +177,11 @@ function JobCardItem({
       )}
 
       {/* Move buttons */}
-      <div className="flex items-center gap-2 pt-1 border-t border-border/40">
+      <div className="flex items-center gap-2 pt-1 border-t border-border">
         <Button
           variant="outline"
           size="sm"
-          className="h-7 px-2.5 text-xs border-border bg-transparent hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30 gap-1"
+          className="h-7 px-2.5 text-xs gap-1"
           disabled={!canMovePrev}
           onClick={() => onMove(job.id, "prev")}
         >
@@ -191,7 +191,7 @@ function JobCardItem({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 px-2.5 text-xs border-border bg-transparent hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30 gap-1"
+          className="h-7 px-2.5 text-xs gap-1"
           disabled={!canMoveNext}
           onClick={() => onMove(job.id, "next")}
         >
@@ -206,7 +206,7 @@ function JobCardItem({
 // --------------------------------------------------------------------------
 // Column
 // --------------------------------------------------------------------------
-function KanbanColumn({
+function KanbanColumnSection({
   col,
   jobs,
   onMove,
@@ -223,7 +223,7 @@ function KanbanColumn({
       <div className="flex items-center gap-2 pb-2 border-b border-border">
         <span className="text-muted-foreground">{col.icon}</span>
         <span className="text-sm font-semibold text-foreground">{col.label}</span>
-        <span className="ml-auto text-xs font-mono bg-secondary border border-border rounded-full px-2 py-0.5 text-muted-foreground">
+        <span className="ml-auto text-xs font-mono bg-muted border border-border rounded-full px-2 py-0.5 text-muted-foreground">
           {jobs.length}
         </span>
       </div>
@@ -231,9 +231,9 @@ function KanbanColumn({
       {/* Cards */}
       <div className="flex flex-col gap-3">
         {jobs.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/50 bg-secondary/10 py-10 flex flex-col items-center gap-2">
-            <span className="text-sm text-muted-foreground/50">No jobs here yet</span>
-            <span className="text-xs text-muted-foreground/30">Ask the agent to search for roles</span>
+          <div className="rounded-xl border border-dashed border-border bg-muted/30 py-10 flex flex-col items-center gap-2">
+            <span className="text-sm text-muted-foreground">No jobs here yet</span>
+            <span className="text-xs text-muted-foreground/60">Ask the agent to search for roles</span>
           </div>
         ) : (
           jobs.map((job) => (
@@ -304,7 +304,7 @@ export function KanbanBoard({ jobs, setJobs }: KanbanBoardProps) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card/50 p-5 flex flex-col gap-4 flex-1 min-h-0">
+    <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4 flex-1 min-h-0 shadow-sm">
       {/* Board header */}
       <div className="flex items-center gap-2.5 shrink-0">
         <Briefcase className="w-4 h-4 text-primary" />
@@ -317,7 +317,7 @@ export function KanbanBoard({ jobs, setJobs }: KanbanBoardProps) {
       {/* Two-column grid */}
       <div className="grid grid-cols-2 gap-5 overflow-y-auto min-h-0 pb-1">
         {COLUMNS.map((col) => (
-          <KanbanColumn
+          <KanbanColumnSection
             key={col.id}
             col={col}
             jobs={jobs.filter((j) => j.column === col.id)}
