@@ -239,7 +239,7 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
     resumeRef.current = resume
   }, [resume])
 
-  const { messages, sendMessage, status, error, stop } = useChat({
+  const { messages, sendMessage, status, addToolOutput, error, stop } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       prepareSendMessagesRequest: ({ messages, id }) => ({
@@ -250,8 +250,11 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
         },
       }),
     }),
-    // Do NOT auto-send after tool calls — this is what causes the unwanted
-    // follow-up LLM request after add_jobs_batch completes.
+    // NOTE: We deliberately do NOT set sendAutomaticallyWhen here.
+    // That option was what caused the follow-up LLM request after tool calls.
+    // addToolOutput is still needed to satisfy the SDK's internal state
+    // (prevents "Tool result is missing" errors on follow-up messages),
+    // but without sendAutomaticallyWhen the SDK won't re-send to the LLM.
     onToolCall({ toolCall }) {
       if (toolCall.toolName === "add_jobs_batch") {
         const inp = toolCall.input as { jobs?: AddToKanbanArgs[] }
@@ -259,9 +262,11 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
         for (const job of jobs) {
           onAddJob?.(job)
         }
-        // Return the result directly — no addToolOutput call so the AI SDK
-        // does NOT automatically trigger another round-trip to the LLM.
-        return { success: true, count: jobs.length }
+        addToolOutput({
+          tool: "add_jobs_batch",
+          toolCallId: toolCall.toolCallId,
+          output: { success: true, count: jobs.length },
+        })
       }
     },
   })
