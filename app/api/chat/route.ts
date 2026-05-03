@@ -1,10 +1,10 @@
 import { streamText, tool, convertToModelMessages } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
+import { z } from "zod"
 
 const google = createGoogleGenerativeAI({
   apiKey: process.env.gemini_key,
 })
-import { z } from "zod"
 
 export const maxDuration = 30
 
