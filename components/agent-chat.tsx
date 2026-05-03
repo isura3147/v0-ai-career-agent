@@ -155,6 +155,52 @@ interface AgentChatProps {
 }
 
 // --------------------------------------------------------------------------
+// Rotating status words shown while the agent is working
+// --------------------------------------------------------------------------
+const STATUS_WORDS = [
+  "Thinking",
+  "Searching",
+  "Fetching jobs",
+  "Analyzing matches",
+  "Scoring fit",
+  "Reviewing skills",
+  "Adding to board",
+  "Finalizing",
+]
+
+function ThinkingIndicator() {
+  const [wordIndex, setWordIndex] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setWordIndex((prev) => (prev + 1) % STATUS_WORDS.length)
+    }, 1400)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <div className="flex gap-3 items-start">
+      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-secondary border border-border">
+        <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+      </div>
+      <div className="bg-secondary border border-border rounded-2xl rounded-tl-sm px-4 py-2.5 flex items-center gap-3">
+        <div className="flex gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: "0ms" }} />
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: "200ms" }} />
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: "400ms" }} />
+        </div>
+        <span
+          key={wordIndex}
+          className="text-sm text-muted-foreground font-mono animate-in fade-in slide-in-from-bottom-1 duration-300"
+        >
+          {STATUS_WORDS[wordIndex]}…
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
 // Agent Chat Panel — wired up with useChat()
 // --------------------------------------------------------------------------
 export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
@@ -245,6 +291,16 @@ export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
+        {isStreaming &&
+          (() => {
+            // Show "Thinking…" bubble whenever we're streaming and the assistant
+            // hasn't started producing visible text yet.
+            const last = messages[messages.length - 1]
+            const lastIsAssistantWithText =
+              last?.role === "assistant" && getMessageText(last.parts as any).trim().length > 0
+            if (!lastIsAssistantWithText) return <ThinkingIndicator />
+            return null
+          })()}
         <div ref={bottomRef} />
       </div>
 

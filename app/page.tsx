@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { ResumePanel, RESUME_STORAGE_KEY } from "@/components/resume-panel"
 import { AgentChat, type AddToKanbanArgs } from "@/components/agent-chat"
-import { SkillGapWidget } from "@/components/skill-gap-widget"
 import { KanbanBoard, type JobCard, STORAGE_KEY, getInitialJobs } from "@/components/kanban-board"
 import { BrainCircuit } from "lucide-react"
 
@@ -73,9 +72,8 @@ export default function Page() {
           <AgentChat onAddJob={handleAddJob} resume={resume} />
         </section>
 
-        {/* Right Column: Skill Gap + Kanban */}
+        {/* Right Column: Kanban */}
         <section className="flex flex-col gap-3 p-4 overflow-hidden min-h-0">
-          <SkillGapWidget jobs={jobs} />
           <KanbanBoard jobs={jobs} setJobs={setJobs} />
         </section>
       </main>

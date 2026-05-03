@@ -104,8 +104,8 @@ export async function POST(req: Request) {
     const kanbanCount = countKanbanCalls(messages)
     console.log("[v0] add_to_kanban calls already in history:", kanbanCount)
 
-    // Hard cap: max 2 jobs per conversation turn
-    const KANBAN_LIMIT = 2
+    // Hard cap: max 5 jobs per conversation turn (matches Tavily max_results)
+    const KANBAN_LIMIT = 5
     const kanbanLimitReached = kanbanCount >= KANBAN_LIMIT
 
     if (kanbanLimitReached) {
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
     if (!kanbanLimitReached) {
       toolset.add_to_kanban = tool({
         description:
-          "Add a job opportunity to the user's Kanban board in the Discovered column. Call this AT MOST ONCE per request.",
+          "Add a job opportunity to the user's Kanban board in the Discovered column. Call this ONCE PER JOB you want to add — typically once for each result returned by search_jobs.",
         inputSchema: z.object({
           title: z.string().describe("The job title"),
           company: z.string().describe("The company name"),
@@ -167,32 +167,34 @@ Use the resume above as the GROUND TRUTH for the user's skills, experience, and 
 }
 
 WORKFLOW:
-1. When the user asks for jobs, FIRST call search_jobs with a query that reflects their resume (e.g., if their resume says "5 years React + Node", search "senior react node developer remote jobs").
-2. Pick THE SINGLE BEST match from the search results based on the resume.
-3. Call add_to_kanban EXACTLY ONCE. Compute matchPercentage HONESTLY:
-   - Compare the resume's skills/experience against the job's requirements.
+1. When the user asks for jobs, FIRST call search_jobs ONCE with a query that reflects their resume (e.g., if their resume says "5 years React + Node", search "senior react node developer remote jobs").
+2. For EACH result returned by search_jobs (up to ${KANBAN_LIMIT}), call add_to_kanban — one call per job. Add ALL of the search results as separate Kanban cards so the user can review them.
+3. For each add_to_kanban call, compute matchPercentage HONESTLY against the resume:
    - 90-100 = strong match (most required skills present, right experience level).
    - 70-89 = good match (many skills overlap, minor gaps).
    - 50-69 = partial match (some core skills missing).
-   - Below 50 = poor match (don't add it — search again with a better query).
-4. Populate missingSkills with the SPECIFIC skills the job requires that are NOT in the user's resume.
-   - ALWAYS include the description field with a 2-4 sentence summary of the role and its key requirements, derived from the search result content.
+   - Below 50 = weak match — still add it but score it low.
+4. For each job:
+   - Populate missingSkills with the SPECIFIC skills the job requires that are NOT in the user's resume.
+   - ALWAYS include the description field with a 2-4 sentence summary of the role, derived from the search result content.
    - ALWAYS pass through the real link from the search result — never fabricate URLs.
-5. Then RESPOND WITH A TEXT MESSAGE describing:
-   - Why this job is a good fit (cite resume strengths).
-   - Which skills are missing and how to bridge the gap.
-   Do NOT call any more tools.
+5. AFTER all add_to_kanban calls are done, RESPOND WITH A SINGLE TEXT MESSAGE summarizing:
+   - How many jobs you added.
+   - Which 1-2 are the strongest matches and why.
+   - Common skill gaps across the listings.
+   Do NOT call any more tools after the summary.
 
 STRICT RULES:
-- Call search_jobs first to get REAL job data. NEVER hallucinate jobs.
-- Call add_to_kanban AT MOST ONCE per user request.
+- Call search_jobs ONCE, then make multiple add_to_kanban calls in sequence.
+- NEVER hallucinate jobs — only use real search results.
+- Call add_to_kanban AT MOST ${KANBAN_LIMIT} times per user request.
 - Match scoring MUST reflect the actual resume, not generic estimates.
-- After add_to_kanban returns its result, your next output MUST be plain text — no more tool calls.
-- If the user asks for "more jobs", they need to send a new message.
+- After all add_to_kanban calls, your next output MUST be plain text — no more tool calls.
 - ${kanbanLimitReached ? "The user has reached the maximum jobs for this turn. Respond with text only." : ""}`,
       messages: await convertToModelMessages(messages),
-      // Hard ceiling on server-side step loop
-      stopWhen: stepCountIs(3),
+      // Hard ceiling on server-side step loop:
+      // 1 search_jobs + up to 5 add_to_kanban + 1 final summary = 7, give a small buffer.
+      stopWhen: stepCountIs(8),
       tools: toolset,
       onStepFinish: ({ toolCalls, finishReason }) => {
         console.log(
