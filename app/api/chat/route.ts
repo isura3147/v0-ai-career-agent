@@ -1,4 +1,5 @@
 import { streamText, tool, convertToModelMessages } from "ai"
+import { google } from "@ai-sdk/google"
 import { z } from "zod"
 
 export const maxDuration = 30
@@ -11,7 +12,7 @@ export async function POST(req: Request) {
     console.log("[v0] Received messages:", JSON.stringify(messages, null, 2))
 
     const result = streamText({
-      model: "openai/gpt-4o",
+      model: google("gemini-1.5-flash"),
       system:
         "You are an autonomous Career Strategist. Extract skills, search for jobs, and save matches using your tools.",
       messages: await convertToModelMessages(messages),
