@@ -1,11 +1,12 @@
 import { streamText, tool, convertToModelMessages, stepCountIs } from "ai"
-import { createCerebras } from "@ai-sdk/cerebras"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { z } from "zod"
 import PQueue from "p-queue"
 
-const cerebras = createCerebras({
-  apiKey: process.env.CEREBRAS_API_KEY || "",
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
 })
+
 
 export const maxDuration = 60
 
@@ -121,7 +122,7 @@ function hasBatchedJobs(messages: any[]): boolean {
 
 export async function POST(req: Request) {
   console.log("[v0] POST /api/chat — start")
-  console.log("[v0] CEREBRAS_API_KEY present:", !!process.env.CEREBRAS_API_KEY)
+  console.log("[v0] GOOGLE_GENERATIVE_AI_API_KEY present:", !!process.env.GOOGLE_GENERATIVE_AI_API_KEY)
   console.log("[v0] TAVILY_API_KEY present:", !!process.env.TAVILY_API_KEY)
 
   try {
@@ -187,7 +188,7 @@ export async function POST(req: Request) {
     const result = await llmQueue.add(() =>
       withRetry(async () =>
         streamText({
-          model: cerebras("qwen-3-235b-a22b-instruct-2507"),
+          model: google("gemini-2.5-flash"),
       system: `You are a Career Strategist AI assistant helping users find real job opportunities tailored to their background.
 
 ${
