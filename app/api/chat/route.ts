@@ -96,8 +96,10 @@ export async function POST(req: Request) {
   console.log("[v0] TAVILY_API_KEY present:", !!process.env.TAVILY_API_KEY)
 
   try {
-    const { messages } = await req.json()
+    const { messages, resume } = await req.json()
+    const resumeText = typeof resume === "string" ? resume.trim() : ""
     console.log("[v0] Received", messages?.length ?? 0, "messages")
+    console.log("[v0] Resume present:", !!resumeText, "length:", resumeText.length)
 
     const kanbanCount = countKanbanCalls(messages)
     console.log("[v0] add_to_kanban calls already in history:", kanbanCount)
@@ -147,17 +149,37 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model: cerebras("qwen-3-235b-a22b-instruct-2507"),
-      system: `You are a Career Strategist AI assistant helping users find real job opportunities.
+      system: `You are a Career Strategist AI assistant helping users find real job opportunities tailored to their background.
+
+${
+  resumeText
+    ? `=== USER RESUME ===
+${resumeText}
+=== END RESUME ===
+
+Use the resume above as the GROUND TRUTH for the user's skills, experience, and background. Every match assessment MUST be based on this resume.`
+    : "NOTE: The user has not provided a resume yet. If they ask for jobs without a resume, still help them, but mention they should add their resume to the panel for better-tailored matches."
+}
 
 WORKFLOW:
-1. When the user asks for jobs, FIRST call search_jobs with a relevant query (e.g., "javascript developer jobs remote").
-2. Pick THE SINGLE BEST match from the search results.
-3. Call add_to_kanban EXACTLY ONCE with that job's real data.
-4. Then RESPOND WITH A TEXT MESSAGE describing what you found and added. Do NOT call any more tools.
+1. When the user asks for jobs, FIRST call search_jobs with a query that reflects their resume (e.g., if their resume says "5 years React + Node", search "senior react node developer remote jobs").
+2. Pick THE SINGLE BEST match from the search results based on the resume.
+3. Call add_to_kanban EXACTLY ONCE. Compute matchPercentage HONESTLY:
+   - Compare the resume's skills/experience against the job's requirements.
+   - 90-100 = strong match (most required skills present, right experience level).
+   - 70-89 = good match (many skills overlap, minor gaps).
+   - 50-69 = partial match (some core skills missing).
+   - Below 50 = poor match (don't add it — search again with a better query).
+4. Populate missingSkills with the SPECIFIC skills the job requires that are NOT in the user's resume.
+5. Then RESPOND WITH A TEXT MESSAGE describing:
+   - Why this job is a good fit (cite resume strengths).
+   - Which skills are missing and how to bridge the gap.
+   Do NOT call any more tools.
 
 STRICT RULES:
 - Call search_jobs first to get REAL job data. NEVER hallucinate jobs.
 - Call add_to_kanban AT MOST ONCE per user request.
+- Match scoring MUST reflect the actual resume, not generic estimates.
 - After add_to_kanban returns its result, your next output MUST be plain text — no more tool calls.
 - If the user asks for "more jobs", they need to send a new message.
 - ${kanbanLimitReached ? "The user has reached the maximum jobs for this turn. Respond with text only." : ""}`,

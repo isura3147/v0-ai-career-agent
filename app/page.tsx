@@ -1,20 +1,25 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ResumePanel } from "@/components/resume-panel"
+import { ResumePanel, RESUME_STORAGE_KEY } from "@/components/resume-panel"
 import { AgentChat, type AddToKanbanArgs } from "@/components/agent-chat"
 import { SkillGapWidget } from "@/components/skill-gap-widget"
 import { KanbanBoard, type JobCard, STORAGE_KEY, getInitialJobs } from "@/components/kanban-board"
 import { BrainCircuit } from "lucide-react"
 
 export default function Page() {
-  // Lift Kanban state to the page level so AgentChat can add jobs
+  // Lift Kanban + Resume state to the page level so AgentChat can use them
   const [jobs, setJobs] = useState<JobCard[]>([])
+  const [resume, setResume] = useState("")
   const [mounted, setMounted] = useState(false)
 
-  // Initialize jobs from localStorage after mount (client-side only)
+  // Initialize jobs and resume from localStorage after mount (client-side only)
   useEffect(() => {
     setJobs(getInitialJobs())
+    if (typeof window !== "undefined") {
+      const storedResume = localStorage.getItem(RESUME_STORAGE_KEY) || ""
+      setResume(storedResume)
+    }
     setMounted(true)
   }, [])
 
@@ -63,8 +68,8 @@ export default function Page() {
       <main className="flex-1 grid grid-cols-[35%_65%] gap-0 overflow-hidden min-h-0">
         {/* Left Column: Resume + Agent Chat */}
         <section className="flex flex-col gap-3 p-4 border-r border-border overflow-hidden min-h-0">
-          <ResumePanel />
-          <AgentChat onAddJob={handleAddJob} />
+          <ResumePanel resume={resume} setResume={setResume} />
+          <AgentChat onAddJob={handleAddJob} resume={resume} />
         </section>
 
         {/* Right Column: Skill Gap + Kanban */}

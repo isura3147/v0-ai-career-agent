@@ -150,17 +150,36 @@ export interface AddToKanbanArgs {
 
 interface AgentChatProps {
   onAddJob?: (args: AddToKanbanArgs) => void
+  resume?: string
 }
 
 // --------------------------------------------------------------------------
 // Agent Chat Panel — wired up with useChat()
 // --------------------------------------------------------------------------
-export function AgentChat({ onAddJob }: AgentChatProps) {
+export function AgentChat({ onAddJob, resume = "" }: AgentChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [input, setInput] = useState("")
 
+  // Keep latest resume in a ref so the transport callback always sees the
+  // current value without recreating the transport on every keystroke.
+  const resumeRef = useRef(resume)
+  useEffect(() => {
+    resumeRef.current = resume
+  }, [resume])
+
   const { messages, sendMessage, status, addToolOutput, error, stop } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      // Attach the latest resume to every chat request so the agent can
+      // tailor matchPercentage and missingSkills to the user's background.
+      prepareSendMessagesRequest: ({ messages, id }) => ({
+        body: {
+          messages,
+          id,
+          resume: resumeRef.current,
+        },
+      }),
+    }),
     // Automatically continue the conversation after client-side tool execution
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall({ toolCall }) {
