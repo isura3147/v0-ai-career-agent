@@ -192,7 +192,7 @@ export async function POST(req: Request) {
     const result = await llmQueue.add(() =>
       withRetry(async () =>
         streamText({
-          model: google("gemini-2.5-flash"),
+          model: google("gemini-3.1-flash-lite"),
       system: `You are an elite Career Strategist AI assistant helping users find highly relevant job opportunities.
 
 ${
